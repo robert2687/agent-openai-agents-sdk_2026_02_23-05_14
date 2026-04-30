@@ -303,9 +303,9 @@
         <div class="card"><div class="card-icon">&#127760;</div><div class="card-title">Chat Interfaces</div><div class="card-body">Two frontends: a <strong>Next.js</strong> app (<code>:3000</code>) and a <strong>Gradio</strong> app (<code>:7860</code>). Both talk to the same FastAPI backend.</div></div>
         <div class="card"><div class="card-icon">&#9889;</div><div class="card-title">FastAPI Server (:8000)</div><div class="card-body">Handles <code>POST /invocations</code> (MLflow), <code>/v1/chat/completions</code> (streaming proxy), and <code>GET /health</code>. Implements MLflow ResponsesAgent.</div></div>
         <div class="card"><div class="card-icon">&#129504;</div><div class="card-title">OpenAI Agents SDK</div><div class="card-body">Manages the tool-calling loop, conversation context, and multi-step reasoning. System prompt is loaded from <code>system_prompt.txt</code>.</div></div>
-        <div class="card"><div class="card-icon">&#128260;</div><div class="card-title">Fallback Client</div><div class="card-body">Tries Nemotron &#8594; Qwen &#8594; GPT-4.1. All three tiers support tool calling. Raises <code>RuntimeError</code> when all are exhausted.</div></div>
+        <div class="card"><div class="card-icon">&#128260;</div><div class="card-title">Fallback Client</div><div class="card-body">Tries <strong>gpt-4.1-mini</strong> &#8594; <strong>gpt-4.1</strong>. Both tiers support tool calling. Raises <code>RuntimeError</code> when all retries are exhausted.</div></div>
         <div class="card"><div class="card-icon">&#128295;</div><div class="card-title">Tool Registry</div><div class="card-body">Five tools dynamically loaded at startup via <code>importlib</code>: read_file, write_file, http_get, http_post, run_shell.</div></div>
-        <div class="card"><div class="card-icon">&#128202;</div><div class="card-title">MLflow Tracing</div><div class="card-body">Every invocation is traced via <code>mlflow.openai.autolog()</code>. Spans export to Databricks workspace automatically.</div></div>
+        <div class="card"><div class="card-icon">&#128202;</div><div class="card-title">MLflow Tracing</div><div class="card-body">Every invocation is traced via <code>mlflow.openai.autolog()</code>. Stored in local SQLite (<code>mlflow.db</code>) by default; configurable via <code>MLFLOW_TRACKING_URI</code>.</div></div>
       </div>
       <div class="flow-wrap">
         <div class="flow-label">Request flow</div>
@@ -371,26 +371,24 @@
         <div class="section-desc">Three LLMs in priority order. On failure or rate-limit the next tier is tried transparently.</div>
       </div>
       <div class="stat-grid">
-        <div class="stat-card"><div class="stat-value">3</div><div class="stat-label">Tiers</div></div>
-        <div class="stat-card"><div class="stat-value">2</div><div class="stat-label">Providers</div></div>
-        <div class="stat-card"><div class="stat-value">120B</div><div class="stat-label">Primary params</div></div>
-        <div class="stat-card"><div class="stat-value">72B</div><div class="stat-label">Fallback #1</div></div>
+        <div class="stat-card"><div class="stat-value">2</div><div class="stat-label">Tiers</div></div>
+        <div class="stat-card"><div class="stat-value">1</div><div class="stat-label">Provider</div></div>
+        <div class="stat-card"><div class="stat-value">4.1</div><div class="stat-label">Primary (mini)</div></div>
+        <div class="stat-card"><div class="stat-value">4.1</div><div class="stat-label">Fallback (full)</div></div>
       </div>
       <div class="chain-visual">
-        <div class="chain-tier tier-1"><div class="tier-num">1</div><div class="tier-label">Primary</div><div class="tier-model">nemotron-3-super<br/>120b-a12b:free</div><div class="tier-provider">via OpenRouter</div><div class="chain-arrow">&#8594;</div></div>
-        <div class="chain-tier tier-2"><div class="tier-num">2</div><div class="tier-label">Fallback</div><div class="tier-model">qwen-2.5-72b<br/>-instruct</div><div class="tier-provider">via OpenRouter</div><div class="chain-arrow">&#8594;</div></div>
-        <div class="chain-tier tier-3"><div class="tier-num">3</div><div class="tier-label">Final</div><div class="tier-model">gpt-4.1</div><div class="tier-provider">via OpenAI</div></div>
+        <div class="chain-tier tier-1"><div class="tier-num">1</div><div class="tier-label">Primary</div><div class="tier-model">gpt-4.1-mini</div><div class="tier-provider">via OpenAI</div><div class="chain-arrow">&#8594;</div></div>
+        <div class="chain-tier tier-2"><div class="tier-num">2</div><div class="tier-label">Fallback</div><div class="tier-model">gpt-4.1</div><div class="tier-provider">via OpenAI</div></div>
       </div>
       <table class="data-table">
         <thead><tr><th>Tier</th><th>Model ID</th><th>Provider</th><th>Tool Calls</th></tr></thead>
         <tbody>
-          <tr><td><span class="badge badge-primary">&#9312; Primary</span></td><td style="font-family:var(--font-mono);font-size:.78rem">nvidia/nemotron-3-super-120b-a12b:free</td><td>OpenRouter</td><td><span class="badge-check">&#10003;</span></td></tr>
-          <tr><td><span class="badge badge-secondary">&#9313; Fallback</span></td><td style="font-family:var(--font-mono);font-size:.78rem">qwen/qwen-2.5-72b-instruct</td><td>OpenRouter</td><td><span class="badge-check">&#10003;</span></td></tr>
-          <tr><td><span class="badge badge-tertiary">&#9314; Final</span></td><td style="font-family:var(--font-mono);font-size:.78rem">gpt-4.1</td><td>OpenAI</td><td><span class="badge-check">&#10003;</span></td></tr>
+          <tr><td><span class="badge badge-primary">&#9312; Primary</span></td><td style="font-family:var(--font-mono);font-size:.78rem">gpt-4.1-mini</td><td>OpenAI</td><td><span class="badge-check">&#10003;</span></td></tr>
+          <tr><td><span class="badge badge-secondary">&#9313; Fallback</span></td><td style="font-family:var(--font-mono);font-size:.78rem">gpt-4.1</td><td>OpenAI</td><td><span class="badge-check">&#10003;</span></td></tr>
         </tbody>
       </table>
       <hr class="divider"/>
-      <div class="alert alert-tip"><span>&#128161;</span><div>Set <code>AGENT_BACKEND=databricks</code> to use <strong>databricks-gpt-5-2</strong> served via Databricks MCP Server with Unity Catalog tool registration and full MLflow workspace tracing.</div></div>
+      <div class="alert alert-tip"><span>&#128161;</span><div>Set <code>AGENT_MODEL</code> and <code>AGENT_FALLBACK_MODEL</code> in <code>.env</code> to use any OpenAI-compatible model (e.g. <strong>gpt-4o</strong>, <strong>o3</strong>). Set <code>AGENT_BACKEND=databricks</code> to switch to Databricks-hosted models.</div></div>
     </div>
   </section>
 
@@ -401,7 +399,7 @@
         <div class="section-title">Setup &amp; Deployment</div>
         <div class="section-desc">Get the agent running locally in under five minutes, or deploy to Databricks Model Serving.</div>
       </div>
-      <div class="alert alert-info"><span>&#8505;</span><div>Prerequisites: <strong>Python 3.11+</strong>, <strong>uv</strong> (<code>pip install uv</code>), and at least one of <code>OPENROUTER_API_KEY</code> or <code>OPENAI_API_KEY</code>.</div></div>
+      <div class="alert alert-info"><span>&#8505;</span><div>Prerequisites: <strong>Python 3.11+</strong>, <strong>uv</strong> (install: <code>curl -LsSf https://astral.sh/uv/install.sh | sh</code>), and <code>OPENAI_API_KEY</code>.</div></div>
       <div style="font-weight:700;font-size:.9rem;margin-bottom:12px;">1 &#8212; Quick start</div>
       <div class="code-wrap"><div class="code-bar"><div class="code-bar-left"><span class="code-filename">Terminal</span><span class="code-lang-tag">Shell</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
         <pre><span class="cm"># Clone and install</span>
@@ -411,37 +409,38 @@ uv sync
 
 <span class="cm"># Configure credentials</span>
 cp .env.example .env
-<span class="cm"># Edit .env: set OPENROUTER_API_KEY and/or OPENAI_API_KEY</span>
+<span class="cm"># Edit .env: set OPENAI_API_KEY (AGENT_BACKEND=openai is the default)</span>
 
-<span class="cm"># Start API server + Gradio UI</span>
-uv run start-app
+<span class="cm"># Verify environment</span>
+uv run verify-setup
+
+<span class="cm"># Start API server with live reload</span>
+uv run start-server --reload
 <span class="cm"># API:    http://localhost:8000</span>
-<span class="cm"># Gradio: http://localhost:7860</span>
 <span class="cm"># Health: http://localhost:8000/health</span></pre></div>
-      <div style="font-weight:700;font-size:.9rem;margin-bottom:12px;margin-top:28px;">2 &#8212; Full stack with Next.js UI</div>
+      <div style="font-weight:700;font-size:.9rem;margin-bottom:12px;margin-top:28px;">2 &#8212; Full stack with Gradio UI</div>
       <div class="code-wrap"><div class="code-bar"><div class="code-bar-left"><span class="code-filename">Terminal</span><span class="code-lang-tag">Shell</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
-        <pre>uv run start-app --with-ui
-<span class="cm"># Or separately:</span>
-uv run start-server                           <span class="cm"># API :8000</span>
-cd e2e-chatbot-app-next &amp;&amp; npm i &amp;&amp; npm run dev  <span class="cm"># UI  :3000</span></pre></div>
-      <div style="font-weight:700;font-size:.9rem;margin-bottom:12px;margin-top:28px;">3 &#8212; Databricks Model Serving</div>
+        <pre>uv run start-app
+<span class="cm"># API:    http://localhost:8000</span>
+<span class="cm"># Gradio: http://localhost:7860</span></pre></div>
+      <div style="font-weight:700;font-size:.9rem;margin-bottom:12px;margin-top:28px;">3 &#8212; Docker (no Python needed)</div>
       <div class="code-wrap"><div class="code-bar"><div class="code-bar-left"><span class="code-filename">Terminal</span><span class="code-lang-tag">Shell</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
-        <pre>databricks auth login
-uv run quickstart   <span class="cm"># registers + deploys to Model Serving</span></pre></div>
+        <pre>OPENAI_API_KEY=sk-... docker compose up --build
+<span class="cm"># API: http://localhost:8000</span></pre></div>
       <div style="font-weight:700;font-size:.9rem;margin-bottom:12px;margin-top:28px;">4 &#8212; Diagnostics</div>
       <div class="code-wrap"><div class="code-bar"><div class="code-bar-left"><span class="code-filename">Terminal</span><span class="code-lang-tag">Shell</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
         <pre>curl http://localhost:8000/health
-uv run verify-setup
-uv run agent-evaluate
+uv run python verify_setup.py
+uv run pytest tests/test_smoke_endpoints.py -v
 uv run discover-tools</pre></div>
       <hr class="divider"/>
       <div style="font-weight:700;font-size:.9rem;margin-bottom:12px;">.env reference</div>
       <div class="code-wrap"><div class="code-bar"><div class="code-bar-left"><span class="code-filename">.env</span><span class="code-lang-tag">env</span></div><button class="copy-btn" onclick="copyCode(this)">copy</button></div>
-        <pre>OPENROUTER_API_KEY=sk-or-...
-OPENAI_API_KEY=sk-...
-AGENT_BACKEND=openai        <span class="cm"># openai | databricks</span>
+        <pre>AGENT_BACKEND=openai            <span class="cm"># openai (default) | databricks</span>
+OPENAI_API_KEY=sk-...           <span class="cm"># required for openai mode</span>
 AGENT_MODEL=gpt-4.1-mini
 AGENT_FALLBACK_MODEL=gpt-4.1
+MLFLOW_TRACKING_URI=sqlite:///mlflow.db
 API_PORT=8000
 UI_PORT=7860</pre></div>
     </div>
