@@ -2,7 +2,26 @@
 
 ## MANDATORY First Actions
 
-**Ask the user interactively:**
+First determine whether the user wants:
+
+- local/OpenAI mode
+- Databricks mode
+
+If the user does not specify, default to local/OpenAI mode.
+
+**For local/OpenAI mode:**
+
+1. Ask only for the model provider details that matter locally:
+   > "Do you want to run this locally with OpenAI-compatible APIs, and do you already have `OPENAI_API_KEY` configured?"
+
+2. Verify the local setup path:
+   - Prefer `uv run verify-setup`
+   - Prefer `uv run start-server --reload` as the default local runtime
+   - Use `docker compose up --build` only when the user wants the optional local UI stack
+
+3. Do not ask for Databricks auth, app names, or Lakebase unless the user explicitly wants Databricks features.
+
+**For Databricks mode, ask the user interactively:**
 
 1. **App deployment target:**
    > "Do you have an existing Databricks app you want to deploy to, or should we create a new one? If existing, what's the app name?"
@@ -20,7 +39,7 @@ This helps you understand:
 - Whether authentication is already set up
 - Which profile to use for subsequent commands
 
-If no profiles exist or `.env` is missing, guide the user through running `uv run quickstart` to set up authentication and configuration. See the **quickstart** skill for details.
+If no profiles exist or `.env` is missing, guide the user through running `uv run quickstart --backend databricks` to set up authentication and configuration. See the **quickstart** skill for details.
 
 ## Understanding User Goals
 
@@ -34,7 +53,9 @@ If no profiles exist or `.env` is missing, guide the user through running `uv ru
    - External APIs or services
 3. **Any specific Databricks resources they want to connect?**
 
-Use `uv run discover-tools` to show them available resources in their workspace, then help them select the right ones for their use case. **See the `add-tools` skill for how to connect tools and grant permissions.**
+In local/OpenAI mode, ask what APIs, files, or services the agent needs and wire those directly in agent code.
+
+In Databricks mode, use `uv run discover-tools` to show them available resources in their workspace, then help them select the right ones for their use case. **See the `add-tools` skill for how to connect tools and grant permissions.**
 
 ## Handling Deployment Errors
 
@@ -68,9 +89,11 @@ Ask the user: "I see there's an existing app with the same name. Would you like 
 
 | Task | Command |
 | ------ | --------- |
-| Setup | `uv run quickstart` |
+| Setup (local/OpenAI) | `uv run verify-setup` |
+| Setup (Databricks) | `uv run quickstart --backend databricks` |
 | Discover tools | `uv run discover-tools` |
-| Run locally | `uv run start-app` |
+| Run locally | `uv run start-server --reload` |
+| Run local UI | `docker compose up --build` |
 | Deploy | `databricks bundle deploy && databricks bundle run agent_openai_agents_sdk` |
 | View logs | `databricks apps logs <app-name> --follow` |
 
@@ -82,6 +105,7 @@ Ask the user: "I see there's an existing app with the same name. Would you like 
 | ------ | --------- |
 | `agent_server/agent.py` | Agent logic, model, instructions, MCP servers |
 | `agent_server/start_server.py` | FastAPI server + MLflow setup |
+| `.env.example` | Local/OpenAI and optional Databricks configuration template |
 | `agent_server/evaluate_agent.py` | Agent evaluation with MLflow scorers |
 | `databricks.yml` | Bundle config & resource permissions |
 | `scripts/quickstart.py` | One-command setup script |
@@ -91,7 +115,7 @@ Ask the user: "I see there's an existing app with the same name. Would you like 
 
 ## Agent Framework Capabilities
 
-> **⚠️ IMPORTANT:** When adding any tool to the agent, you MUST also grant permissions in `databricks.yml`. See the **add-tools** skill for required steps and examples.
+> **⚠️ IMPORTANT:** When adding Databricks-managed tools to the agent, you MUST also grant permissions in `databricks.yml`. Pure local/OpenAI tools do not require Databricks permissions.
 
 **Tool Types:**
 
@@ -101,7 +125,7 @@ Ask the user: "I see there's an existing app with the same name. Would you like 
 
 **Built-in Tools:**
 
-- **system.ai.python_exec** - Execute Python code dynamically within agent queries (code interpreter)
+- **system.ai.python_exec** - Available only in Databricks mode via Databricks MCP/code interpreter integration
 
 **Common Patterns:**
 

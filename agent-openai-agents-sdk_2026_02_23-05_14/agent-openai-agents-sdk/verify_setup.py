@@ -205,13 +205,13 @@ def main():
         print()
 
     print("5. Checking Python dependencies...")
-        checks.append(check_dependencies(backend))
+    checks.append(check_dependencies(backend))
     print()
 
     print("=" * 60)
     if all(checks):
         print("✓ ALL CHECKS PASSED!")
-            print_next_steps(backend)
+        print_next_steps(backend)
     else:
         print("✗ SOME CHECKS FAILED")
         print()

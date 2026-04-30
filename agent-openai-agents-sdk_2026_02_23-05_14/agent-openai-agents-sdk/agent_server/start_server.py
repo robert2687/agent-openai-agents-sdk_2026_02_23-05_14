@@ -17,13 +17,16 @@ from agent_server import agent as agent_module  # noqa: E402
 agent_server = AgentServer("ResponsesAgent", enable_chat_proxy=True)
 # Define the app as a module level variable to enable multiple workers
 app = agent_server.app  # noqa: F841
-setup_mlflow_git_based_version_tracking()
 
 LOGGER = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def _lifespan(_app):
+    try:
+        setup_mlflow_git_based_version_tracking()
+    except Exception as _exc:  # pragma: no cover - optional Databricks feature
+        LOGGER.warning("MLflow git-based version tracking unavailable (non-fatal): %s", _exc)
     LOGGER.warning(
         "Agent startup | backend=%s model=%s fallback_model=%s retries=%s base_retry_seconds=%s",
         agent_module.BACKEND,
