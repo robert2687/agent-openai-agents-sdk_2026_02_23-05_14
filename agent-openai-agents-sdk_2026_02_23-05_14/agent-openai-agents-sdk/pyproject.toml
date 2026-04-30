@@ -48,9 +48,10 @@ discover-tools = "scripts.discover_tools:main"
 
 [tool.setuptools]
 include-package-data = true
+py-modules = ["verify_setup", "standalone_server", "setup_and_launch"]
 
 [tool.setuptools.packages.find]
-include = ["local_agents*", "api*", "ui*"]
+include = ["agent_server*", "local_agents*", "api*", "ui*", "scripts*", "sdk*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

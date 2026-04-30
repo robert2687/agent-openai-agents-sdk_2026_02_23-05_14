@@ -23,6 +23,10 @@ BOLD = '\033[1m'
 AGENT_DIR = Path(__file__).parent.absolute()
 ENV_FILE = AGENT_DIR / '.env'
 
+
+def detect_backend() -> str:
+    return (os.getenv('AGENT_BACKEND') or 'openai').strip().lower() or 'openai'
+
 def print_section(text):
     """Print a section header"""
     print(f"\n{BOLD}{BLUE}{'='*70}{RESET}")
@@ -125,7 +129,7 @@ def create_mlflow_experiment():
     print_info("Could not determine experiment ID - you may need to create it manually")
     return None
 
-def update_env_file(experiment_id):
+def update_env_file(experiment_id, backend="databricks"):
     """Update .env file with experiment ID"""
     print_step("Updating .env file...")
 
@@ -136,8 +140,18 @@ def update_env_file(experiment_id):
         if example_file.exists():
             ENV_FILE.write_text(example_file.read_text())
         else:
-            # Create minimal .env
-            env_content = """# Environment configuration for Databricks Agent
+            if backend == "openai":
+                env_content = """# Environment configuration for local/OpenAI mode
+AGENT_BACKEND=openai
+OPENAI_API_KEY=
+AGENT_MODEL=gpt-4.1-mini
+AGENT_FALLBACK_MODEL=gpt-4.1
+MLFLOW_TRACKING_URI=sqlite:///mlflow.db
+API_PORT=8000
+UI_PORT=7860
+"""
+            else:
+                env_content = """# Environment configuration for Databricks Agent
 DATABRICKS_CONFIG_PROFILE=DEFAULT
 MLFLOW_EXPERIMENT_ID=
 CHAT_APP_PORT=3000
@@ -145,6 +159,24 @@ MLFLOW_TRACKING_URI="databricks"
 MLFLOW_REGISTRY_URI="databricks-uc"
 """
             ENV_FILE.write_text(env_content)
+
+    if backend == "openai":
+        content = ENV_FILE.read_text()
+        replacements = {
+            "AGENT_BACKEND": "openai",
+            "MLFLOW_TRACKING_URI": "sqlite:///mlflow.db",
+        }
+        for key, value in replacements.items():
+            if f"{key}=" in content:
+                content = "\n".join(
+                    f"{key}={value}" if line.startswith(f"{key}=") else line
+                    for line in content.splitlines()
+                )
+            else:
+                content += f"\n{key}={value}"
+        ENV_FILE.write_text(content + ("\n" if not content.endswith("\n") else ""))
+        print_success("Configured local/OpenAI defaults")
+        return
 
     # Update MLFLOW_EXPERIMENT_ID if we have it
     if experiment_id:
@@ -159,18 +191,19 @@ MLFLOW_REGISTRY_URI="databricks-uc"
 
     print_success(".env file configured")
 
-def check_dependencies():
+def check_dependencies(backend="databricks"):
     """Check required Python packages"""
     print_step("Checking Python dependencies...")
 
     required_packages = [
         "fastapi",
         "uvicorn",
-        "databricks-openai",
         "mlflow",
         "openai-agents",
         "python-dotenv",
     ]
+    if backend == "databricks":
+        required_packages.append("databricks-openai")
 
     missing = []
     for package in required_packages:
@@ -188,7 +221,7 @@ def check_dependencies():
 
     print_success("All dependencies available")
 
-def start_services():
+def start_services(backend="databricks"):
     """Start Agent Server and Chat UI"""
     print_section("STARTING SERVICES")
 
@@ -203,19 +236,24 @@ def start_services():
     # Load environment
     load_dotenv(ENV_FILE)
 
-    port = os.getenv('CHAT_APP_PORT', '3000')
+    if backend == "openai":
+        print_info("Agent Server will run on: http://localhost:8000")
+        print_info("Health check: http://localhost:8000/health")
+        print_step("Starting local/OpenAI backend...")
+        print_info("Press Ctrl+C to stop the server\n")
+        run_command(f"cd {AGENT_DIR} && uv run start-server --port 8000 --reload", show_output=True)
+        return
 
+    port = os.getenv('CHAT_APP_PORT', '3000')
     print_info(f"Agent Server will run on: http://localhost:8000")
     print_info(f"Chat UI will run on: http://localhost:{port}")
 
     print_step("Starting Agent Server and Chat UI...")
     print_info("Press Ctrl+C to stop both services\n")
 
-    # Try to run start-app if available
     result = run_command(f"cd {AGENT_DIR} && uv run start-app --port 8000", show_output=True, check=False)
 
     if result and result.returncode != 0:
-        # Fallback: try start-server
         print_info("Fallback: starting server manually...")
         run_command(f"cd {AGENT_DIR} && uv run start-server --port 8000 --reload", show_output=True)
 
@@ -245,6 +283,18 @@ def main():
     """Main setup and launch routine"""
     try:
         print_section("AGENT SETUP & LAUNCH")
+        backend = detect_backend()
+
+        if backend == "openai":
+            print("\n[1/3] CONFIGURE LOCAL ENVIRONMENT")
+            update_env_file(None, backend="openai")
+
+            print("\n[2/3] VERIFY DEPENDENCIES")
+            check_dependencies(backend="openai")
+
+            print("\n[3/3] START AGENT SERVER")
+            start_services(backend="openai")
+            return
 
         # Step 1: Check Databricks auth
         print("\n[1/5] AUTHENTICATE WITH DATABRICKS")
@@ -258,15 +308,15 @@ def main():
 
         # Step 3: Update .env
         print("\n[3/5] CONFIGURE ENVIRONMENT")
-        update_env_file(experiment_id)
+        update_env_file(experiment_id, backend="databricks")
 
         # Step 4: Check dependencies
         print("\n[4/5] VERIFY DEPENDENCIES")
-        check_dependencies()
+        check_dependencies(backend="databricks")
 
         # Step 5: Start services
         print("\n[5/5] START AGENT SERVER & CHAT UI")
-        start_services()
+        start_services(backend="databricks")
 
     except KeyboardInterrupt:
         print(f"\n\n{YELLOW}Shutdown requested...{RESET}")

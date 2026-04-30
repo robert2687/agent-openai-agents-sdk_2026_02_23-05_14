@@ -43,6 +43,7 @@ async def health() -> dict:
     return {
         "status": "ok",
         "backend": agent_module.BACKEND,
+        "databricks_tools_enabled": agent_module.USE_DATABRICKS,
         "model": agent_module.MODEL,
         "fallback_model": agent_module.FALLBACK_MODEL or None,
         "max_retries": agent_module.MAX_RETRIES,

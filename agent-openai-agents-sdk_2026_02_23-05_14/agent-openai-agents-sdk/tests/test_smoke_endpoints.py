@@ -4,20 +4,8 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-# These smoke tests require Databricks agent framework
-# Skip the entire module if dependencies are unavailable
-try:
-    import mlflow  # noqa: F401
-    import databricks  # noqa: F401
-    from agents import Agent  # noqa: F401
-    DATABRICKS_AVAILABLE = True
-except ImportError:
-    DATABRICKS_AVAILABLE = False
-
-pytestmark = pytest.mark.skipif(
-    not DATABRICKS_AVAILABLE,
-    reason="Databricks agent framework not installed"
-)
+pytest.importorskip("mlflow")
+pytest.importorskip("agents")
 
 
 def _prepare_env() -> None:

@@ -1,15 +1,28 @@
 import json
 import logging
-from typing import AsyncGenerator, AsyncIterator, Optional
+from typing import Any, AsyncGenerator, AsyncIterator, Optional
 from uuid import uuid4
 
 from agents.result import StreamEvent
-from databricks.sdk import WorkspaceClient
 from mlflow.genai.agent_server import get_request_headers
 from mlflow.types.responses import ResponsesAgentStreamEvent
 
+try:
+    from databricks.sdk import WorkspaceClient
+except ImportError:  # pragma: no cover - optional in OpenAI-only mode
+    WorkspaceClient = Any
+
+
+def _require_databricks_sdk() -> None:
+    if WorkspaceClient is Any:
+        raise RuntimeError(
+            "Databricks backend selected but databricks-sdk is not installed. "
+            "Install optional Databricks dependencies or switch to AGENT_BACKEND=openai."
+        )
+
 
 def get_databricks_host(workspace_client: WorkspaceClient | None = None) -> Optional[str]:
+    _require_databricks_sdk()
     workspace_client = workspace_client or WorkspaceClient()
     try:
         return workspace_client.config.host
@@ -36,6 +49,7 @@ def get_user_workspace_client() -> Optional[WorkspaceClient]:
     token = get_request_headers().get("x-forwarded-access-token")
     if not token:
         return None
+    _require_databricks_sdk()
     return WorkspaceClient(token=token, auth_type="pat")
 
 

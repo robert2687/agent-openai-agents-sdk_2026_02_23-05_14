@@ -1,10 +1,10 @@
 # API Documentation
 
-This document describes the HTTP API exposed by the Responses API Agent server in this repository. The server is powered by the MLflow `AgentServer` and follows the OpenAI Responses API contract.
+This server follows the MLflow ResponsesAgent interface and is intended to be usable in local/OpenAI mode without Databricks. Databricks mode remains optional for Databricks-authenticated tools and deployment.
 
 ## Base URL
 
-When running locally with `uv run start-app` or `uv run start-server`, the default base URL is:
+When running locally with `uv run start-server` or Docker Compose, the default base URL is:
 
 ```text
 http://localhost:8000
@@ -14,7 +14,7 @@ For Databricks Apps deployments, the base URL is the Databricks App URL provided
 
 ## Authentication
 
-Local development typically relies on a `.env` file for Databricks authentication (OAuth or PAT). For Databricks Apps, authentication is handled by the app service principal or on-behalf-of user credentials when configured.
+Local/OpenAI mode relies on `.env` values such as `AGENT_BACKEND=openai` and `OPENAI_API_KEY`. Databricks authentication is only required when using `AGENT_BACKEND=databricks`.
 
 ## Content Type
 
@@ -69,6 +69,24 @@ Invokes the agent and returns a complete response.
 }
 ```
 
+## Endpoint: Health
+
+`GET /health`
+
+Example response:
+
+```json
+{
+  "status": "ok",
+  "backend": "openai",
+  "databricks_tools_enabled": false,
+  "model": "gpt-4.1-mini",
+  "fallback_model": "gpt-4.1",
+  "max_retries": 2,
+  "retry_base_seconds": 1.0
+}
+```
+
 ## Streaming Responses
 
 To stream responses, set `"stream": true` in the request body and send the request to the same endpoint:
@@ -100,7 +118,7 @@ curl -X POST http://localhost:8000/invocations \
 
 ## Tooling & Capabilities
 
-The default agent uses the Databricks MCP server for the built-in code interpreter tool (`system.ai.python_exec`). Tool calls are surfaced in Responses API output items. The agent implementation lives in:
+In local/OpenAI mode, the agent runs without Databricks MCP tooling. In Databricks mode, the agent can use the Databricks MCP server for the built-in code interpreter tool (`system.ai.python_exec`). Tool calls are surfaced in Responses API output items. The agent implementation lives in:
 
 - `agent_server/agent.py`
 - `agent_server/start_server.py`
@@ -110,7 +128,7 @@ The default agent uses the Databricks MCP server for the built-in code interpret
 Errors are returned as standard HTTP error responses with JSON bodies. Common issues include:
 
 - **400 Bad Request**: Invalid input format.
-- **401/403 Unauthorized**: Missing or invalid Databricks authentication.
+- **401/403 Unauthorized**: Missing or invalid upstream credentials for the configured backend.
 - **500 Internal Server Error**: Unhandled agent or tool error.
 
 ## Related Documentation

@@ -3,13 +3,17 @@ from __future__ import annotations
 import os
 import asyncio
 import logging
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 # Default to local SQLite-backed MLflow tracking before any mlflow import.
 os.environ.setdefault("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
 
-from databricks.sdk import WorkspaceClient
 from openai import AsyncOpenAI
+
+try:
+    from databricks.sdk import WorkspaceClient
+except ImportError:  # pragma: no cover - optional in OpenAI-only mode
+    WorkspaceClient = Any
 
 import mlflow
 from agents import Agent, Runner, set_default_openai_api, set_default_openai_client
@@ -53,6 +57,14 @@ def _load_databricks_openai():
             "Databricks backend selected but databricks-openai is not installed. "
             "Install optional Databricks dependencies to use AGENT_BACKEND=databricks."
         ) from exc
+
+
+def _require_databricks_sdk() -> None:
+    if WorkspaceClient is Any:
+        raise RuntimeError(
+            "Databricks backend selected but databricks-sdk is not installed. "
+            "Install optional Databricks dependencies or switch to AGENT_BACKEND=openai."
+        )
 
 
 def _read_int_env(name: str, default: int) -> int:
@@ -104,6 +116,7 @@ if os.getenv("AGENT_ENABLE_MLFLOW_AUTOLOG", "0") == "1":
 
 
 async def init_mcp_server(workspace_client: WorkspaceClient | None = None):
+    _require_databricks_sdk()
     _, McpServer = _load_databricks_openai()
     return McpServer(
         url=build_mcp_url("/api/2.0/mcp/functions/system/ai", workspace_client=workspace_client),

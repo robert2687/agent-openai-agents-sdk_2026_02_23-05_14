@@ -1,183 +1,60 @@
 # Responses API Agent
 
-This template defines a conversational agent app. The app comes with a built-in chat UI, but also exposes an API endpoint for invoking the agent so that you can serve your UI elsewhere (e.g. on your website or in a mobile app).
+This project now supports a real local-first workflow.
 
-The agent in this template implements the [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) interface. It has access to a single tool; the [built-in code interpreter tool](https://docs.databricks.com/aws/en/generative-ai/agent-framework/code-interpreter-tools#built-in-python-executor-tool) (`system.ai.python_exec`) on Databricks. You can customize agent code and test it via the API or UI.
+- Local/OpenAI mode is the default path and does not require Databricks.
+- Databricks mode remains available for Databricks-authenticated tools and deployment.
 
-The agent input and output format are defined by MLflow's ResponsesAgent interface, which closely follows the [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) interface. See [the MLflow docs](https://mlflow.org/docs/latest/genai/flavors/responses-agent-intro/) for input and output formats for streaming and non-streaming requests, tracing requirements, and other agent authoring details.
+The backend exposes an MLflow ResponsesAgent-compatible API, a health endpoint, retry and fallback model controls, and an optional local UI stack via Docker Compose.
 
-## Build with AI Assistance
-
-We recommend using AI coding assistants (Claude Code, Cursor, GitHub Copilot) to customize and deploy this template. Agent Skills in `.claude/skills/` provide step-by-step guidance for common tasks like setup, adding tools, and deployment. These skills are automatically detected by Claude, Cursor, and GitHub Copilot.
-
-## 📚 Documentation & Resources
-
-- **[QUICKSTART.md](./QUICKSTART.md)** - Comprehensive setup guide with multiple methods
-- **[CHECKLIST.md](./CHECKLIST.md)** - Step-by-step checklist to get up and running
-- **[COMMANDS.md](./COMMANDS.md)** - Quick reference for all common commands
-- **[verify_setup.py](./verify_setup.py)** - Automated setup verification script
-- **[setup.sh](./setup.sh)** - Alternative automated setup script
-
-## Quick start
-
-Run the `uv run quickstart` script to quickly set up your local environment and start the agent server. At any step, if there are issues, refer to the manual local development loop setup below.
-
-This script will:
-
-1. Verify uv, nvm, and Databricks CLI installations
-2. Configure Databricks authentication
-3. Configure agent tracing, by creating and linking an MLflow experiment to your app
-4. Start the agent server and chat app
-
-```bash
-uv run quickstart
-```
-
-### Extension-like local mode (no Databricks auth)
-
-If you want this to behave more like a local extension (just API key + run), you can use OpenAI mode:
+## Local/OpenAI quick start
 
 ```bash
 cp .env.example .env
-```
-
-Then set the following in `.env`:
-
-```bash
-AGENT_BACKEND=openai
-OPENAI_API_KEY=<your-key>
-AGENT_MODEL=gpt-4.1-mini
-```
-
-Then run:
-
-```bash
+# set OPENAI_API_KEY in .env
+uv sync
+uv run verify-setup
 uv run start-server --reload
-# or full UI + backend:
-uv run start-app
 ```
 
-### Reliability and model fallback
-
-You can configure retries and fallback model behavior:
+Check the service:
 
 ```bash
-AGENT_MODEL=gpt-4.1-mini
-AGENT_FALLBACK_MODEL=gpt-4.1
-AGENT_MAX_RETRIES=2
-AGENT_RETRY_BASE_SECONDS=1.0
+curl http://localhost:8000/health
 ```
 
-At startup the server logs the active backend/model/fallback and retry settings.
-
-### Health endpoint
-
-The server exposes health metadata at:
-
-- `GET /health`
-
-Response includes current backend, model, fallback model, and retry settings.
-
-### Optional conversation memory backend
-
-The repository now includes an optional memory-store scaffold (`agent_server/memory_store.py`) with:
-
-- in-memory backend (default)
-- Azure Cosmos DB backend (optional)
-
-For Cosmos DB, use high-cardinality partitioning to isolate users/tenants and prevent hotspots (for example `tenantId#userId`).
-
-After the setup is complete, you can start the agent server and the chat app locally with:
+Optional local UI stack:
 
 ```bash
-uv run start-app
+docker compose up --build
 ```
 
-This will start the agent server and the chat app at <http://localhost:8000>.
+## Databricks quick start
 
-**Next steps**: see [modifying your agent](#modifying-your-agent) to customize and iterate on the agent code.
+Use this only if you want Databricks features:
 
-## Manual local development loop setup
+```bash
+uv run quickstart --backend databricks
+```
 
-1. **Set up your local environment**
-   Install `uv` (python package manager), `nvm` (node version manager), and the Databricks CLI:
+## Runtime behavior
 
-   - [`uv` installation docs](https://docs.astral.sh/uv/getting-started/installation/)
-   - [`nvm` installation](https://github.com/nvm-sh/nvm?tab=readme-ov-file#installing-and-updating)
-     - Run the following to use Node 20 LTS:
+- `AGENT_BACKEND=openai` uses `OPENAI_API_KEY` and skips Databricks imports and auth.
+- `AGENT_BACKEND=databricks` enables Databricks MCP integration when the optional dependencies are installed.
+- `GET /health` reports backend, Databricks tool availability, active model, fallback model, and retry settings.
 
-       ```bash
-       nvm use 20
-       ```
+## Main entrypoints
 
-   - [`databricks CLI` installation](https://docs.databricks.com/aws/en/dev-tools/cli/install)
+- `uv run start-server --reload`: recommended local backend
+- `docker compose up --build`: local API + Gradio UI
+- `uv run quickstart --backend databricks`: optional Databricks setup
 
-2. **Set up local authentication to Databricks**
+## Docs
 
-   In order to access Databricks resources from your local machine while developing your agent, you need to authenticate with Databricks. Choose one of the following options:
-
-   **Option 1: OAuth via Databricks CLI (Recommended)**
-
-   Authenticate with Databricks using the CLI. See the [CLI OAuth documentation](https://docs.databricks.com/aws/en/dev-tools/cli/authentication#oauth-user-to-machine-u2m-authentication).
-
-   ```bash
-   databricks auth login
-   ```
-
-   Set the `DATABRICKS_CONFIG_PROFILE` environment variable in your .env file to the profile you used to authenticate:
-
-   ```bash
-   DATABRICKS_CONFIG_PROFILE="DEFAULT" # change to the profile name you chose
-   ```
-
-   **Option 2: Personal Access Token (PAT)**
-
-   See the [PAT documentation](https://docs.databricks.com/aws/en/dev-tools/auth/pat#databricks-personal-access-tokens-for-workspace-users).
-
-   ```bash
-   # Add these to your .env file
-   DATABRICKS_HOST="https://host.databricks.com"
-   DATABRICKS_TOKEN="dapi_token"
-   ```
-
-   See the [Databricks SDK authentication docs](https://docs.databricks.com/aws/en/dev-tools/sdk-python#authenticate-the-databricks-sdk-for-python-with-your-databricks-account-or-workspace).
-
-3. **Create and link an MLflow experiment to your app**
-
-   Create an MLflow experiment to enable tracing and version tracking. This is automatically done by the `uv run quickstart` script.
-
-   Create the MLflow experiment via the CLI:
-
-   ```bash
-   DATABRICKS_USERNAME=$(databricks current-user me | jq -r .userName)
-   databricks experiments create-experiment /Users/$DATABRICKS_USERNAME/agents-on-apps
-   ```
-
-   Make a copy of `.env.example` to `.env` and update the `MLFLOW_EXPERIMENT_ID` in your `.env` file with the experiment ID you created. The `.env` file will be automatically loaded when starting the server.
-
-   ```bash
-   cp .env.example .env
-   # Edit .env and fill in your experiment ID
-   ```
-
-   See the [MLflow experiments documentation](https://docs.databricks.com/aws/en/mlflow/experiments#create-experiment-from-the-workspace).
-
-4. **Test your agent locally**
-
-   Start up the agent server and chat UI locally:
-
-   ```bash
-   uv run start-app
-   ```
-
-   Query your agent via the UI (<http://localhost:8000>) or REST API:
-
-   **Advanced server options:**
-
-   ```bash
-   uv run start-server --reload   # hot-reload the server on code changes
-   uv run start-server --port 8001 # change the port the server listens on
-   uv run start-server --workers 4 # run the server with multiple workers
+- [QUICKSTART.md](./QUICKSTART.md)
+- [CHECKLIST.md](./CHECKLIST.md)
+- [COMMANDS.md](./COMMANDS.md)
+- [API.md](./API.md)
    ```
 
    - Example streaming request:

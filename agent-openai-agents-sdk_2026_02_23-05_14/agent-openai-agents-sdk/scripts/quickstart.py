@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Quickstart setup script for Databricks agent development.
+Quickstart setup script for local/OpenAI and optional Databricks agent development.
 
 This script handles:
 - Checking prerequisites (uv, nvm, Node 20, Databricks CLI)
@@ -13,6 +13,7 @@ Usage:
     uv run quickstart [OPTIONS]
 
 Options:
+    --backend MODE    Choose backend: openai or databricks
     --profile NAME    Use specified Databricks profile (non-interactive)
     --host URL        Databricks workspace URL (for initial setup)
     --lakebase NAME   Lakebase instance name (for memory features)
@@ -124,17 +125,17 @@ def check_prerequisites() -> dict[str, bool]:
     return prereqs
 
 
-def check_missing_prerequisites(prereqs: dict[str, bool]) -> list[str]:
+def check_missing_prerequisites(prereqs: dict[str, bool], backend: str) -> list[str]:
     """Return list of missing prerequisites with install instructions."""
     missing = []
 
     if not prereqs["uv"]:
         missing.append("uv - Install with: curl -LsSf https://astral.sh/uv/install.sh | sh")
 
-    if not prereqs["node"] or not prereqs["npm"]:
+    if backend == "databricks" and (not prereqs["node"] or not prereqs["npm"]):
         missing.append("Node.js 20 - Install with: nvm install 20 (or download from nodejs.org)")
 
-    if not prereqs["databricks"]:
+    if backend == "databricks" and not prereqs["databricks"]:
         if platform.system() == "Darwin":
             missing.append("Databricks CLI - Install with: brew install databricks/tap/databricks")
         else:
@@ -161,13 +162,24 @@ def setup_env_file() -> None:
     else:
         # Create a minimal .env
         env_local.write_text(
-            "# Databricks configuration\n"
-            "DATABRICKS_CONFIG_PROFILE=DEFAULT\n"
-            "MLFLOW_EXPERIMENT_ID=\n"
-            'MLFLOW_TRACKING_URI="databricks"\n'
-            'MLFLOW_REGISTRY_URI="databricks-uc"\n'
+            "AGENT_BACKEND=openai\n"
+            "OPENAI_API_KEY=\n"
+            "AGENT_MODEL=gpt-4.1-mini\n"
+            'MLFLOW_TRACKING_URI="sqlite:///mlflow.db"\n'
         )
         print_success("Created .env")
+
+
+def setup_openai_mode() -> None:
+    print_step("Configuring local/OpenAI mode...")
+    setup_env_file()
+    update_env_file("AGENT_BACKEND", "openai")
+    update_env_file("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
+    print_success("Configured .env for local/OpenAI mode")
+    print("\nNext steps:")
+    print("  1. Add OPENAI_API_KEY to .env")
+    print("  2. Run 'uv run verify-setup'")
+    print("  3. Run 'uv run start-server --reload'")
 
 
 def update_env_file(key: str, value: str) -> None:
@@ -483,15 +495,22 @@ def setup_lakebase(profile_name: str, lakebase_arg: str = None) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Quickstart setup for Databricks agent development",
+        description="Quickstart setup for local/OpenAI and optional Databricks agent development",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    uv run quickstart                    # Interactive setup
-    uv run quickstart --profile DEFAULT  # Use existing profile (non-interactive)
-    uv run quickstart --host https://...  # Set up new profile with host
-    uv run quickstart --lakebase my-db   # Include Lakebase setup for memory
+    uv run quickstart --backend openai
+    uv run quickstart --backend databricks
+    uv run quickstart --backend databricks --profile DEFAULT
+    uv run quickstart --backend databricks --host https://...
+    uv run quickstart --backend databricks --lakebase my-db
         """
+    )
+    parser.add_argument(
+        "--backend",
+        choices=["openai", "databricks"],
+        default="openai",
+        help="Choose the backend to configure (default: openai)",
     )
     parser.add_argument(
         "--profile",
@@ -516,7 +535,7 @@ Examples:
 
         # Step 1: Check prerequisites
         prereqs = check_prerequisites()
-        missing = check_missing_prerequisites(prereqs)
+        missing = check_missing_prerequisites(prereqs, args.backend)
 
         if missing:
             print_step("Missing prerequisites:")
@@ -527,6 +546,10 @@ Examples:
 
         # Step 2: Set up .env
         setup_env_file()
+
+        if args.backend == "openai":
+            setup_openai_mode()
+            return
 
         # Step 3: Databricks authentication
         profile_name = setup_databricks_auth(args.profile, args.host)

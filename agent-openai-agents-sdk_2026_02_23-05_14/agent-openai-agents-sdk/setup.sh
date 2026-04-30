@@ -1,6 +1,5 @@
 #!/bin/bash
-# Quick Start Setup Script for Databricks OpenAI Agents SDK
-# This script automates the setup process for running the agent locally
+# Quick Start Setup Script for local/OpenAI and optional Databricks modes
 
 set -e
 
@@ -18,6 +17,8 @@ NC='\033[0m' # No Color
 # Change to the agent directory
 cd "$(dirname "$0")"
 
+BACKEND="${AGENT_BACKEND:-openai}"
+
 echo "Step 1: Checking prerequisites..."
 echo ""
 
@@ -31,17 +32,20 @@ else
     echo -e "${GREEN}✓ uv is installed${NC}"
 fi
 
-# Check for databricks CLI
-if ! command -v databricks &> /dev/null; then
-    echo -e "${RED}✗ Databricks CLI is not installed${NC}"
-    echo "Install from: https://docs.databricks.com/dev-tools/cli/install.html"
-    exit 1
+if [ "$BACKEND" = "databricks" ]; then
+    if ! command -v databricks &> /dev/null; then
+        echo -e "${RED}✗ Databricks CLI is not installed${NC}"
+        echo "Install from: https://docs.databricks.com/dev-tools/cli/install.html"
+        exit 1
+    else
+        echo -e "${GREEN}✓ Databricks CLI is installed${NC}"
+    fi
 else
-    echo -e "${GREEN}✓ Databricks CLI is installed${NC}"
+    echo -e "${GREEN}✓ Databricks CLI not required for OpenAI mode${NC}"
 fi
 
 # Check for nvm/node
-if ! command -v node &> /dev/null; then
+if [ "$BACKEND" = "databricks" ] && ! command -v node &> /dev/null; then
     echo -e "${YELLOW}⚠ Node.js not found. Installing via nvm...${NC}"
     if ! command -v nvm &> /dev/null; then
         echo "Installing nvm..."
@@ -52,7 +56,50 @@ if ! command -v node &> /dev/null; then
     nvm install 20
     nvm use 20
 else
-    echo -e "${GREEN}✓ Node.js is installed${NC}"
+    if command -v node &> /dev/null; then
+        echo -e "${GREEN}✓ Node.js is installed${NC}"
+    else
+        echo -e "${GREEN}✓ Node.js is optional in OpenAI mode${NC}"
+    fi
+fi
+
+if [ "$BACKEND" = "openai" ]; then
+    echo ""
+    echo "Step 2: Configuring local/OpenAI mode..."
+    echo ""
+
+    if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+        cp .env.example .env
+    fi
+
+    if ! grep -q '^AGENT_BACKEND=' .env 2>/dev/null; then
+        echo 'AGENT_BACKEND=openai' >> .env
+    else
+        sed -i 's/^AGENT_BACKEND=.*/AGENT_BACKEND=openai/' .env
+    fi
+
+    if ! grep -q '^MLFLOW_TRACKING_URI=' .env 2>/dev/null; then
+        echo 'MLFLOW_TRACKING_URI=sqlite:///mlflow.db' >> .env
+    else
+        sed -i 's|^MLFLOW_TRACKING_URI=.*|MLFLOW_TRACKING_URI=sqlite:///mlflow.db|' .env
+    fi
+
+    echo -e "${GREEN}✓ OpenAI mode configured${NC}"
+    echo ""
+    echo "Step 3: Installing dependencies..."
+    echo ""
+    uv sync
+    echo -e "${GREEN}✓ Dependencies installed${NC}"
+    echo ""
+    echo "========================================"
+    echo "Setup Complete!"
+    echo "========================================"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Add OPENAI_API_KEY to .env"
+    echo -e "  2. ${GREEN}uv run verify-setup${NC}"
+    echo -e "  3. ${GREEN}uv run start-server --reload${NC}"
+    exit 0
 fi
 
 echo ""

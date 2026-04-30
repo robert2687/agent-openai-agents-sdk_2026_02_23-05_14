@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
-"""
-Setup verification script for Databricks OpenAI Agents SDK
-Checks if all prerequisites and configuration are correct
-"""
+"""Setup verification for local/OpenAI and optional Databricks modes."""
 
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+
+def detect_backend(env_vars: dict[str, str]) -> str:
+    backend = (env_vars.get("AGENT_BACKEND", "") or os.getenv("AGENT_BACKEND", "")).strip().lower()
+    if backend in {"openai", "databricks"}:
+        return backend
+    return "openai" if (env_vars.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")) else "databricks"
 
 
 def parse_env_file(env_path: Path) -> dict[str, str]:
@@ -35,7 +39,7 @@ def check_command(cmd: str, name: str) -> bool:
             version = result.stdout.strip() or result.stderr.strip()
             print(f"✓ {name} is installed: {version.split()[0] if version else 'version unknown'}")
             return True
-        except:
+        except Exception:
             print(f"✓ {name} is installed")
             return True
     else:
@@ -52,29 +56,25 @@ def check_env_file() -> tuple[bool, str]:
 
     print("✓ .env file exists")
     env_vars = parse_env_file(env_path)
-    backend = (env_vars.get("AGENT_BACKEND", "") or "").strip().lower()
-    if backend not in {"databricks", "openai"}:
-        backend = "openai" if env_vars.get("OPENAI_API_KEY") else "databricks"
+    backend = detect_backend(env_vars)
 
     print(f"✓ Backend mode: {backend}")
 
-    required_vars = ["MLFLOW_TRACKING_URI"]
-    missing_required = [k for k in required_vars if not env_vars.get(k)]
-    if missing_required:
-        print(f"  ⚠ Missing or empty: {', '.join(missing_required)}")
+    tracking_uri = env_vars.get("MLFLOW_TRACKING_URI") or os.getenv("MLFLOW_TRACKING_URI") or "sqlite:///mlflow.db"
+    print(f"✓ MLflow tracking URI: {tracking_uri}")
 
     if backend == "openai":
         has_openai = bool(env_vars.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY"))
         if not has_openai:
             print("  ⚠ OPENAI_API_KEY is missing (required for AGENT_BACKEND=openai)")
-        return len(missing_required) == 0 and has_openai, backend
+        return has_openai, backend
 
     optional_vars = ["DATABRICKS_CONFIG_PROFILE", "DATABRICKS_HOST", "DATABRICKS_TOKEN"]
     has_auth = any(env_vars.get(var) for var in optional_vars)
     if not has_auth:
         print(f"  ⚠ No authentication configured (need one of: {', '.join(optional_vars)})")
 
-    return len(missing_required) == 0 and has_auth, backend
+    return has_auth, backend
 
 
 def check_databricks_auth() -> bool:
@@ -94,7 +94,7 @@ def check_databricks_auth() -> bool:
                 username = user_info.get("userName", "unknown")
                 print(f"✓ Databricks authentication working (user: {username})")
                 return True
-            except:
+            except Exception:
                 print("✓ Databricks authentication working")
                 return True
         else:
@@ -120,23 +120,38 @@ def check_python_version() -> bool:
         return False
 
 
-def check_dependencies() -> bool:
-    """Check if Python dependencies are installed"""
+def check_dependencies(backend: str) -> bool:
+    """Check if Python dependencies are installed for the selected backend."""
     try:
         import fastapi
-        import uvicorn
         import mlflow
+        import uvicorn
+        import agents  # noqa: F401
+        if backend == "databricks":
+            import databricks.sdk  # noqa: F401
         print("✓ Core Python dependencies installed")
         return True
     except ImportError as e:
         print(f"✗ Missing Python dependencies: {e}")
-        print("  Run: uv sync")
+        print("  Run: pip install -e .  or  uv sync")
         return False
+
+
+def print_next_steps(backend: str) -> None:
+    print()
+    print("You're ready to start the agent:")
+    if backend == "openai":
+        print("  start-server --reload")
+        print("  or: docker compose up --build")
+        print("  Health check: http://localhost:8000/health")
+    else:
+        print("  start-server --reload")
+        print("  Optional full app: start-app")
 
 
 def main():
     print("=" * 60)
-    print("Databricks Agent Setup Verification")
+    print("Agent Setup Verification")
     print("=" * 60)
     print()
 
@@ -146,10 +161,25 @@ def main():
     checks.append(check_python_version())
     print()
 
+    env_path = Path(".env")
+    env_vars = parse_env_file(env_path) if env_path.exists() else {}
+    backend = detect_backend(env_vars)
+    print(f"Selected backend: {backend}")
+    print()
+
     print("2. Checking prerequisites...")
-    checks.append(check_command("uv", "uv"))
-    checks.append(check_command("databricks", "Databricks CLI"))
-    checks.append(check_command("node", "Node.js"))
+    uv_installed = check_command("uv", "uv")
+    checks.append(uv_installed or check_command("pip", "pip"))
+    if backend == "databricks":
+        checks.append(check_command("databricks", "Databricks CLI"))
+        checks.append(check_command("node", "Node.js"))
+    else:
+        print("✓ Databricks CLI not required for OpenAI mode")
+        node_installed = shutil.which("node") is not None
+        if node_installed:
+            print("✓ Node.js is installed (optional for full web UI)")
+        else:
+            print("ℹ Node.js not installed (optional unless you want the Databricks-style web UI)")
     print()
 
     print("3. Checking configuration...")
@@ -175,15 +205,13 @@ def main():
         print()
 
     print("5. Checking Python dependencies...")
-    checks.append(check_dependencies())
+        checks.append(check_dependencies(backend))
     print()
 
     print("=" * 60)
     if all(checks):
         print("✓ ALL CHECKS PASSED!")
-        print()
-        print("You're ready to start the agent:")
-        print("  uv run start-app")
+            print_next_steps(backend)
     else:
         print("✗ SOME CHECKS FAILED")
         print()
