@@ -89,6 +89,10 @@
     .msg-role{font-size:.73rem;font-weight:700;color:var(--text-muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;}
     .msg-role.user-role{color:#6096d4;}
     .msg-role.agent-role{color:#9d79d4;}
+    .msg-head{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+    .msg-actions{display:flex;align-items:center;gap:6px;}
+    .msg-action-btn{background:none;border:1px solid var(--border);border-radius:5px;color:var(--text-muted);font-size:.68rem;padding:2px 8px;cursor:pointer;transition:all .15s;}
+    .msg-action-btn:hover{border-color:var(--accent);color:var(--accent);}
     .msg-text{font-size:.88rem;line-height:1.7;color:var(--text);white-space:pre-wrap;word-break:break-word;}
     .msg-text code{background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-family:var(--font-mono);font-size:.82em;color:var(--purple);}
     .msg-text pre{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;margin:8px 0;font-family:var(--font-mono);font-size:.8rem;line-height:1.5;}
@@ -112,7 +116,15 @@
     .send-btn:disabled{opacity:.4;cursor:not-allowed;}
     .clear-btn{background:none;border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text-muted);font-size:.8rem;cursor:pointer;align-self:flex-end;transition:all .15s;flex-shrink:0;}
     .clear-btn:hover{border-color:var(--text-muted);color:var(--text);}
+    .retry-btn{background:none;border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text-muted);font-size:.8rem;cursor:pointer;align-self:flex-end;transition:all .15s;flex-shrink:0;}
+    .retry-btn:hover{border-color:var(--accent);color:var(--accent);}
+    .stop-btn{background:var(--surface2);color:var(--yellow);border:1px solid var(--yellow);border-radius:8px;padding:10px 12px;font-size:.78rem;cursor:pointer;align-self:flex-end;transition:opacity .15s;display:none;flex-shrink:0;}
+    .stop-btn.visible{display:inline-flex;align-items:center;}
+    .stop-btn:hover{opacity:.85;}
     .input-footer{max-width:860px;margin:6px auto 0;font-size:.71rem;color:var(--text-muted);display:flex;justify-content:space-between;}
+    .footer-actions{display:flex;gap:8px;align-items:center;}
+    .footer-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);font-size:.7rem;padding:3px 8px;cursor:pointer;transition:all .15s;}
+    .footer-btn:hover{border-color:var(--text);color:var(--text);}
     .suggest-btn{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:6px 16px;color:var(--text-muted);font-size:.8rem;cursor:pointer;transition:all .15s;font-family:inherit;}
     .suggest-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
 
@@ -280,6 +292,8 @@
           onkeydown="handleKey(event)"
           oninput="autoResize(this)"></textarea>
         <button class="clear-btn" onclick="clearChat()" title="Clear conversation">&#8635;</button>
+        <button class="retry-btn" onclick="retryLastUserMessage()" title="Retry last user message">Retry</button>
+        <button class="stop-btn" id="stopBtn" onclick="stopStreaming()" title="Stop current response">Stop</button>
         <button class="send-btn" id="sendBtn" onclick="sendMessage()">
           Send
           <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1L15 8L8 15M15 8H1" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -287,7 +301,11 @@
       </div>
       <div class="input-footer">
         <span id="statusText">Ready</span>
-        <span id="tokenCount"></span>
+        <div class="footer-actions">
+          <button class="footer-btn" onclick="copyTranscript()">Copy transcript</button>
+          <button class="footer-btn" onclick="exportTranscript()">Export JSON</button>
+          <span id="tokenCount"></span>
+        </div>
       </div>
     </div>
   </section>
@@ -450,9 +468,11 @@ UI_PORT=7860</pre></div>
 
 <script>
 const CFG={apiUrl:'http://localhost:8000',model:'gpt-4.1-mini',maxTokens:2048,systemPrompt:''};
+const STORAGE_CFG_KEY='pa_cfg';
+const STORAGE_CHAT_KEY='pa_chat_history';
 
 function loadCfg(){
-  try{const s=sessionStorage.getItem('pa_cfg');if(s)Object.assign(CFG,JSON.parse(s));}catch{}
+  try{const s=localStorage.getItem(STORAGE_CFG_KEY);if(s)Object.assign(CFG,JSON.parse(s));}catch{}
   document.getElementById('cfgApiUrl').value=CFG.apiUrl;
   document.getElementById('cfgModel').value=CFG.model;
   document.getElementById('cfgMaxTokens').value=CFG.maxTokens;
@@ -463,7 +483,7 @@ function saveSettings(){
   CFG.model=document.getElementById('cfgModel').value;
   CFG.maxTokens=parseInt(document.getElementById('cfgMaxTokens').value,10)||2048;
   CFG.systemPrompt=document.getElementById('cfgSystemPrompt').value.trim();
-  sessionStorage.setItem('pa_cfg',JSON.stringify(CFG));
+  localStorage.setItem(STORAGE_CFG_KEY,JSON.stringify(CFG));
   toggleDrawer();checkHealth();
 }
 
@@ -508,10 +528,42 @@ function toggleDrawer(){
   const open=d.classList.toggle('open');o.classList.toggle('open',open);
 }
 
-const history=[];let isStreaming=false;
+const history=[];
+let isStreaming=false;
+let currentAbortController=null;
+
+function persistHistory(){
+  try{localStorage.setItem(STORAGE_CHAT_KEY,JSON.stringify(history));}catch{}
+}
+
+function loadHistory(){
+  try{
+    const raw=localStorage.getItem(STORAGE_CHAT_KEY);
+    if(!raw)return;
+    const parsed=JSON.parse(raw);
+    if(!Array.isArray(parsed) || parsed.length===0)return;
+    const m=document.getElementById('messages');
+    const w=document.getElementById('welcomeMsg');
+    if(w)w.remove();
+    for(const msg of parsed){
+      if(!msg || (msg.role!=='user'&&msg.role!=='assistant') || typeof msg.content!=='string')continue;
+      history.push({role:msg.role,content:msg.content});
+      appendMsg(msg.role==='assistant'?'agent':'user',msg.content);
+    }
+    setStatus(history.filter(x=>x.role==='user').length+' messages');
+  }catch{}
+}
+
+function setStreamingState(active){
+  isStreaming=active;
+  document.getElementById('sendBtn').disabled=active;
+  document.getElementById('stopBtn').classList.toggle('visible',active);
+}
 
 function clearChat(){
+  if(isStreaming)stopStreaming();
   history.length=0;
+  persistHistory();
   const m=document.getElementById('messages');
   m.innerHTML='';m.appendChild(makeWelcome());
   setStatus('Ready');document.getElementById('tokenCount').textContent='';
@@ -531,8 +583,14 @@ function appendMsg(role,text){
   const av=document.createElement('div');av.className='msg-avatar '+(role==='user'?'user':'agent');av.textContent=role==='user'?'\u2191':'\u26a1';
   const ct=document.createElement('div');ct.className='msg-content';
   const rl=document.createElement('div');rl.className='msg-role '+(role==='user'?'user-role':'agent-role');rl.textContent=role==='user'?'You':'PERFECT-AGENT';
+  const hd=document.createElement('div');hd.className='msg-head';
+  const acts=document.createElement('div');acts.className='msg-actions';
+  const copyBtn=document.createElement('button');copyBtn.className='msg-action-btn';copyBtn.textContent='Copy';
+  copyBtn.onclick=()=>copyText(text);
+  acts.appendChild(copyBtn);
   const tx=document.createElement('div');tx.className='msg-text';tx.innerHTML=renderMD(text);
-  ct.append(rl,tx);row.append(av,ct);msgs.appendChild(row);msgs.scrollTop=msgs.scrollHeight;
+  hd.append(rl,acts);
+  ct.append(hd,tx);row.append(av,ct);msgs.appendChild(row);msgs.scrollTop=msgs.scrollHeight;
   return tx;
 }
 function showTyping(){
@@ -560,14 +618,65 @@ function renderMD(text){
 
 function setStatus(t){document.getElementById('statusText').textContent=t;}
 
+async function copyText(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    setStatus('Copied to clipboard');
+    setTimeout(()=>{if(!isStreaming)setStatus('Ready');},900);
+  }catch{}
+}
+
+async function copyTranscript(){
+  const transcript = history.map(m => (m.role==='user'?'You':'PERFECT-AGENT')+':\n'+m.content).join('\n\n');
+  if(!transcript.trim())return;
+  await copyText(transcript);
+}
+
+function exportTranscript(){
+  if(history.length===0)return;
+  const payload={
+    exported_at:new Date().toISOString(),
+    config:{...CFG},
+    messages:[...history]
+  };
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='perfect-agent-transcript-'+Date.now()+'.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function retryLastUserMessage(){
+  if(isStreaming)return;
+  const last=[...history].reverse().find(m=>m.role==='user');
+  if(!last)return;
+  const input=document.getElementById('msgInput');
+  input.value=last.content;
+  autoResize(input);
+  input.focus();
+}
+
+function stopStreaming(){
+  if(currentAbortController){
+    currentAbortController.abort();
+    currentAbortController=null;
+  }
+}
+
 async function sendMessage(){
   if(isStreaming)return;
   const input=document.getElementById('msgInput'),btn=document.getElementById('sendBtn');
   const text=input.value.trim();if(!text)return;
   input.value='';autoResize(input);
   history.push({role:'user',content:text});
+  persistHistory();
   appendMsg('user',text);
-  isStreaming=true;btn.disabled=true;setStatus('Sending\u2026');showTyping();
+  setStreamingState(true);setStatus('Sending\u2026');showTyping();
+  currentAbortController=new AbortController();
   const messages=[];
   if(CFG.systemPrompt)messages.push({role:'system',content:CFG.systemPrompt});
   messages.push(...history);
@@ -576,7 +685,7 @@ async function sendMessage(){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model:CFG.model,messages,max_tokens:CFG.maxTokens,stream:true}),
-      signal:AbortSignal.timeout(120000)
+      signal:currentAbortController.signal
     });
     if(!res.ok){const e=await res.text().catch(()=>res.statusText);throw new Error(res.status+' '+e);}
     removeTyping();
@@ -600,14 +709,26 @@ async function sendMessage(){
       textEl.innerHTML=renderMD(full);
     }
     history.push({role:'assistant',content:full});
+    persistHistory();
     setStatus(history.filter(m=>m.role==='user').length+' messages');
     document.getElementById('tokenCount').textContent='~'+Math.round(full.length/4)+' tokens';
   }catch(err){
     removeTyping();
-    const offline=err.name==='TimeoutError'||err.message.includes('fetch')||err.message.includes('Failed');
-    appendMsg('agent',offline?'\u26a0 Could not reach the API server at `'+CFG.apiUrl+'`.\n\nStart it with:\n```\nuv run start-app\n```\nThen click the status indicator to retry.':'\u26a0 Error: '+err.message);
-    history.pop();setStatus('Error');checkHealth();
-  }finally{isStreaming=false;btn.disabled=false;}
+    if(err.name==='AbortError'){
+      appendMsg('agent','\u23f9 Response stopped by user.');
+      setStatus('Stopped');
+    }else{
+      const offline=err.name==='TimeoutError'||err.message.includes('fetch')||err.message.includes('Failed');
+      appendMsg('agent',offline?'\u26a0 Could not reach the API server at `'+CFG.apiUrl+'`.\n\nStart it with:\n```\nuv run start-app\n```\nThen click the status indicator to retry.':'\u26a0 Error: '+err.message);
+      persistHistory();
+      setStatus('Error');
+      checkHealth();
+    }
+  }finally{
+    currentAbortController=null;
+    setStreamingState(false);
+    btn.disabled=false;
+  }
 }
 
 function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}
@@ -617,7 +738,9 @@ function copyCode(btn){
   navigator.clipboard.writeText(pre.innerText).then(()=>{btn.textContent='copied!';btn.classList.add('copied');setTimeout(()=>{btn.textContent='copy';btn.classList.remove('copied');},1800);});
 }
 
-loadCfg();startHealthPolling();
+loadCfg();
+loadHistory();
+startHealthPolling();
 </script>
 </body>
 </html>
