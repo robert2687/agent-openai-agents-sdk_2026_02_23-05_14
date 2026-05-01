@@ -14,6 +14,11 @@ from .skills import (
     dependency_check,
     code_generator,
     app_creator,
+    generate_tests,
+    format_code,
+    refactor_rename,
+    create_class,
+    create_api_endpoint,
 )
 
 SYSTEM_PROMPT = Path(__file__).with_name("system_prompt.txt").read_text()
@@ -38,6 +43,11 @@ _SKILL_MAP = {
     "dependency_check": dependency_check,
     "code_generator": code_generator,
     "app_creator": app_creator,
+    "generate_tests": generate_tests,
+    "format_code": format_code,
+    "refactor_rename": refactor_rename,
+    "create_class": create_class,
+    "create_api_endpoint": create_api_endpoint,
 }
 
 _SKILL_SCHEMAS = [
@@ -202,6 +212,96 @@ _SKILL_SCHEMAS = [
                     "root": {"type": "string"},
                 },
                 "required": ["app_type", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_tests",
+            "description": "Generate pytest test stubs for all public functions and classes in a Python file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "output_path": {"type": "string"},
+                    "framework": {"type": "string", "enum": ["pytest"], "default": "pytest"},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "format_code",
+            "description": "Format a source file using black (Python), autopep8, or prettier (JS/TS).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "formatter": {"type": "string", "enum": ["auto", "black", "autopep8", "prettier"], "default": "auto"},
+                    "dry_run": {"type": "boolean", "default": False},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "refactor_rename",
+            "description": "Rename an identifier across source files with dry-run preview.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "old_name": {"type": "string"},
+                    "new_name": {"type": "string"},
+                    "root": {"type": "string"},
+                    "whole_word": {"type": "boolean", "default": True},
+                    "dry_run": {"type": "boolean", "default": True},
+                    "include_extensions": {"type": "array", "items": {"type": "string"}},
+                    "max_files": {"type": "integer", "default": 200},
+                },
+                "required": ["old_name", "new_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_class",
+            "description": "Generate a boilerplate class definition file for Python, TypeScript, or Java.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "language": {"type": "string", "enum": ["python", "typescript", "java"], "default": "python"},
+                    "fields": {"type": "array", "items": {"type": "string"}},
+                    "methods": {"type": "array", "items": {"type": "string"}},
+                    "base_class": {"type": "string"},
+                    "output_path": {"type": "string"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_api_endpoint",
+            "description": "Generate a REST endpoint stub for FastAPI, Flask, Express, or Django.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "route": {"type": "string"},
+                    "method": {"type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"], "default": "GET"},
+                    "handler_name": {"type": "string"},
+                    "framework": {"type": "string", "enum": ["fastapi", "flask", "express", "django"], "default": "fastapi"},
+                    "output_path": {"type": "string"},
+                    "include_schema": {"type": "boolean", "default": True},
+                },
+                "required": ["route"],
             },
         },
     },

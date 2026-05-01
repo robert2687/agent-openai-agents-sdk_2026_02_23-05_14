@@ -9,6 +9,11 @@ from agent.skills.list_symbols import list_symbols
 from agent.skills.dependency_check import dependency_check
 from agent.skills.code_generator import code_generator
 from agent.skills.app_creator import app_creator
+from agent.skills.generate_tests import generate_tests
+from agent.skills.format_code import format_code
+from agent.skills.refactor_rename import refactor_rename
+from agent.skills.create_class import create_class
+from agent.skills.create_api_endpoint import create_api_endpoint
 
 __all__ = [
 	"search_code",
@@ -21,4 +26,9 @@ __all__ = [
 	"dependency_check",
 	"code_generator",
 	"app_creator",
+	"generate_tests",
+	"format_code",
+	"refactor_rename",
+	"create_class",
+	"create_api_endpoint",
 ]

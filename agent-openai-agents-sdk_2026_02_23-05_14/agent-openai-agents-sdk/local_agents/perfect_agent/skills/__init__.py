@@ -9,6 +9,11 @@ from local_agents.perfect_agent.skills.list_symbols import list_symbols
 from local_agents.perfect_agent.skills.dependency_check import dependency_check
 from local_agents.perfect_agent.skills.code_generator import code_generator
 from local_agents.perfect_agent.skills.app_creator import app_creator
+from local_agents.perfect_agent.skills.generate_tests import generate_tests
+from local_agents.perfect_agent.skills.format_code import format_code
+from local_agents.perfect_agent.skills.refactor_rename import refactor_rename
+from local_agents.perfect_agent.skills.create_class import create_class
+from local_agents.perfect_agent.skills.create_api_endpoint import create_api_endpoint
 
 __all__ = [
 	"search_code",
@@ -21,4 +26,9 @@ __all__ = [
 	"dependency_check",
 	"code_generator",
 	"app_creator",
+	"generate_tests",
+	"format_code",
+	"refactor_rename",
+	"create_class",
+	"create_api_endpoint",
 ]

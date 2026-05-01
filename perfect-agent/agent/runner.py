@@ -43,6 +43,11 @@ from agent.skills.list_symbols import list_symbols  # noqa: E402
 from agent.skills.dependency_check import dependency_check  # noqa: E402
 from agent.skills.code_generator import code_generator  # noqa: E402
 from agent.skills.app_creator import app_creator  # noqa: E402
+from agent.skills.generate_tests import generate_tests  # noqa: E402
+from agent.skills.format_code import format_code  # noqa: E402
+from agent.skills.refactor_rename import refactor_rename  # noqa: E402
+from agent.skills.create_class import create_class  # noqa: E402
+from agent.skills.create_api_endpoint import create_api_endpoint  # noqa: E402
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -75,6 +80,11 @@ _TOOL_MAP: dict = {
     "dependency_check": dependency_check,
     "code_generator": code_generator,
     "app_creator": app_creator,
+    "generate_tests": generate_tests,
+    "format_code": format_code,
+    "refactor_rename": refactor_rename,
+    "create_class": create_class,
+    "create_api_endpoint": create_api_endpoint,
 }
 
 TOOL_SCHEMAS: list[dict] = [
@@ -390,6 +400,96 @@ TOOL_SCHEMAS: list[dict] = [
                     "root": {"type": "string", "default": "."},
                 },
                 "required": ["app_type", "name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_tests",
+            "description": "Generate pytest test stubs for all public functions and classes in a Python file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path to the source Python file."},
+                    "output_path": {"type": "string", "description": "Optional path to write the generated stubs."},
+                    "framework": {"type": "string", "enum": ["pytest"], "default": "pytest"},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "format_code",
+            "description": "Format a source file using black (Python), autopep8, or prettier (JS/TS/JSON).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path to the file to format."},
+                    "formatter": {"type": "string", "enum": ["auto", "black", "autopep8", "prettier"], "default": "auto"},
+                    "dry_run": {"type": "boolean", "default": False, "description": "Preview changes without writing."},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "refactor_rename",
+            "description": "Safely rename an identifier across all source files in a directory (with dry-run preview).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "old_name": {"type": "string", "description": "Identifier to rename."},
+                    "new_name": {"type": "string", "description": "Replacement identifier."},
+                    "root": {"type": "string", "default": ".", "description": "Root directory to search."},
+                    "whole_word": {"type": "boolean", "default": True},
+                    "dry_run": {"type": "boolean", "default": True, "description": "Preview without writing (default True)."},
+                    "include_extensions": {"type": "array", "items": {"type": "string"}},
+                    "max_files": {"type": "integer", "default": 200},
+                },
+                "required": ["old_name", "new_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_class",
+            "description": "Generate a boilerplate class definition file for Python, TypeScript, or Java.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Class name (PascalCase)."},
+                    "language": {"type": "string", "enum": ["python", "typescript", "java"], "default": "python"},
+                    "fields": {"type": "array", "items": {"type": "string"}, "description": "Field names."},
+                    "methods": {"type": "array", "items": {"type": "string"}, "description": "Additional method names to stub."},
+                    "base_class": {"type": "string", "description": "Optional parent class to extend."},
+                    "output_path": {"type": "string", "description": "Optional file path to write to."},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_api_endpoint",
+            "description": "Generate a REST endpoint stub for FastAPI, Flask, Express, or Django.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "route": {"type": "string", "description": "URL route path, e.g. '/users/{user_id}'."},
+                    "method": {"type": "string", "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"], "default": "GET"},
+                    "handler_name": {"type": "string", "description": "Function/handler name (auto-derived if empty)."},
+                    "framework": {"type": "string", "enum": ["fastapi", "flask", "express", "django"], "default": "fastapi"},
+                    "output_path": {"type": "string", "description": "Optional file path to write to."},
+                    "include_schema": {"type": "boolean", "default": True},
+                },
+                "required": ["route"],
             },
         },
     },
