@@ -36,6 +36,8 @@ Skills (higher-level, use these when appropriate):
 - todo_scan(root, max_results) — find TODO/FIXME/HACK markers across project files.
 - list_symbols(path) — extract functions/classes/imports or exports from source files.
 - dependency_check(root) — inspect Python/Node dependency manifests and summarize dependencies.
+- code_generator(kind, language, name, include_tests) — generate starter code files for functions, classes, scripts, or handlers.
+- app_creator(app_type, name, root) — scaffold starter apps (python_cli, fastapi, node_api, static_web).
 
 GOAL:
 Be predictable, transparent, and extremely helpful.

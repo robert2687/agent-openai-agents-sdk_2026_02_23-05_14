@@ -12,6 +12,8 @@ from .skills import (
     todo_scan,
     list_symbols,
     dependency_check,
+    code_generator,
+    app_creator,
 )
 
 SYSTEM_PROMPT = Path(__file__).with_name("system_prompt.txt").read_text()
@@ -34,6 +36,8 @@ _SKILL_MAP = {
     "todo_scan": todo_scan,
     "list_symbols": list_symbols,
     "dependency_check": dependency_check,
+    "code_generator": code_generator,
+    "app_creator": app_creator,
 }
 
 _SKILL_SCHEMAS = [
@@ -165,6 +169,39 @@ _SKILL_SCHEMAS = [
                     "root": {"type": "string"},
                 },
                 "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "code_generator",
+            "description": "Generate starter code files for common coding tasks.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string", "enum": ["function", "class", "script", "api_handler"]},
+                    "language": {"type": "string", "enum": ["python", "typescript"]},
+                    "name": {"type": "string"},
+                    "include_tests": {"type": "boolean"},
+                },
+                "required": ["kind"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "app_creator",
+            "description": "Scaffold a starter app on disk.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app_type": {"type": "string", "enum": ["python_cli", "fastapi", "node_api", "static_web"]},
+                    "name": {"type": "string"},
+                    "root": {"type": "string"},
+                },
+                "required": ["app_type", "name"],
             },
         },
     },

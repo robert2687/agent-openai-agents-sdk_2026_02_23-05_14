@@ -7,6 +7,8 @@ from agent.skills.code_review import code_review
 from agent.skills.todo_scan import todo_scan
 from agent.skills.list_symbols import list_symbols
 from agent.skills.dependency_check import dependency_check
+from agent.skills.code_generator import code_generator
+from agent.skills.app_creator import app_creator
 
 __all__ = [
 	"search_code",
@@ -17,4 +19,6 @@ __all__ = [
 	"todo_scan",
 	"list_symbols",
 	"dependency_check",
+	"code_generator",
+	"app_creator",
 ]
