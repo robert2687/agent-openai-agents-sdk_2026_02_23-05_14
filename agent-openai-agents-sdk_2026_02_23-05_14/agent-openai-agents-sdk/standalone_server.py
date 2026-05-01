@@ -84,7 +84,7 @@ async def chat_completions(request: Request):
         return JSONResponse(content=error_body, status_code=503)
 
     try:
-        from openai import AsyncOpenAI
+        from openai import AsyncOpenAI, APIStatusError, AuthenticationError
 
         client = AsyncOpenAI(api_key=API_KEY, base_url=BASE_URL)
 
@@ -125,6 +125,29 @@ async def chat_completions(request: Request):
             )
             return JSONResponse(content=response.model_dump())
 
+    except AuthenticationError as exc:
+        LOGGER.error("Authentication failed in /v1/chat/completions: %s", exc)
+        return JSONResponse(
+            content={
+                "error": {
+                    "message": "Authentication failed for provider backend. Check OPENROUTER_API_KEY/OPENAI_API_KEY.",
+                    "type": "authentication_error",
+                    "details": str(exc),
+                }
+            },
+            status_code=401,
+        )
+    except APIStatusError as exc:
+        LOGGER.error("Upstream API error in /v1/chat/completions: %s", exc)
+        return JSONResponse(
+            content={
+                "error": {
+                    "message": f"Upstream API error: {exc}",
+                    "type": "api_error",
+                }
+            },
+            status_code=getattr(exc, "status_code", 502) or 502,
+        )
     except Exception as exc:
         LOGGER.exception("Error in /v1/chat/completions: %s", exc)
         return JSONResponse(
