@@ -20,7 +20,7 @@
     "ws": false
   },
   "dependencies": {
-    "@ai-sdk/react": "^3.0.59",
+    "@ai-sdk/react": "^3.0.174",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
