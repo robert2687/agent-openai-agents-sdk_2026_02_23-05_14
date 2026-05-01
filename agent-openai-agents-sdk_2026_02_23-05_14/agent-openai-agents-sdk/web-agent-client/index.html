@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PERFECT Agent Web MVP</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="top">
+    <h1>PERFECT Agent Web</h1>
+    <div class="meta">
+      <label>
+        API URL
+        <input id="apiUrl" value="http://localhost:8000" />
+      </label>
+      <button id="checkHealth">Health</button>
+      <span id="healthLabel">Unknown</span>
+    </div>
+  </header>
+
+  <section class="selectors">
+    <label>
+      Workspace
+      <select id="workspaceSelect"></select>
+    </label>
+    <label>
+      Project
+      <select id="projectSelect"></select>
+    </label>
+    <button id="saveScope">Save Scope</button>
+  </section>
+
+  <main class="layout">
+    <aside class="history">
+      <h2>Sessions</h2>
+      <button id="newSession">New Session</button>
+      <ul id="sessionList"></ul>
+    </aside>
+
+    <section class="chat">
+      <div id="messages" class="messages"></div>
+      <div class="composer">
+        <textarea id="prompt" placeholder="Ask the agent..."></textarea>
+        <button id="send">Send</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="./main.js"></script>
+</body>
+</html>

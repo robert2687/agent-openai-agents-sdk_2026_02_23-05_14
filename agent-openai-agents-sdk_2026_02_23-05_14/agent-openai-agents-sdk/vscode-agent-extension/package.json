@@ -1,0 +1,69 @@
+{
+  "name": "perfect-agent-vscode",
+  "displayName": "PERFECT Agent",
+  "description": "PERFECT-AGENT IDE assistant for local/OpenAI backend",
+  "version": "0.1.0",
+  "publisher": "robert2687",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:perfectAgent.openChat",
+    "onCommand:perfectAgent.explainCurrentFile",
+    "onCommand:perfectAgent.summarizeSelection",
+    "onCommand:perfectAgent.checkBackendHealth",
+    "onCommand:perfectAgent.proposePatch"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "perfectAgent.openChat",
+        "title": "PERFECT Agent: Open Chat"
+      },
+      {
+        "command": "perfectAgent.explainCurrentFile",
+        "title": "PERFECT Agent: Explain Current File"
+      },
+      {
+        "command": "perfectAgent.summarizeSelection",
+        "title": "PERFECT Agent: Summarize Selection"
+      },
+      {
+        "command": "perfectAgent.checkBackendHealth",
+        "title": "PERFECT Agent: Check Backend Health"
+      },
+      {
+        "command": "perfectAgent.proposePatch",
+        "title": "PERFECT Agent: Propose Patch (Confirm Before Apply)"
+      }
+    ],
+    "configuration": {
+      "title": "PERFECT Agent",
+      "properties": {
+        "perfectAgent.baseUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "Base URL for PERFECT-AGENT backend"
+        },
+        "perfectAgent.requestTimeoutMs": {
+          "type": "number",
+          "default": 30000,
+          "description": "Timeout for backend requests"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -w -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.10",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.6.3"
+  }
+}
