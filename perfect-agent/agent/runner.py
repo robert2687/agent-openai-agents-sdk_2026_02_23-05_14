@@ -262,8 +262,11 @@ def chat_with_agent(user_message: str) -> str:
 def run_interactive() -> None:
     """Blocking REPL: read from stdin, print agent responses to stdout."""
     check_api_keys()
+    # Ensure UTF-8 output to avoid UnicodeEncodeError on Windows consoles
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     print(
-        "PERFECT-AGENT  (Nemotron → Qwen → GPT-4.1 fallback)  |  Ctrl+C or 'exit' to quit\n"
+        "PERFECT-AGENT  (Nemotron -> Qwen -> GPT-4.1 fallback)  |  Ctrl+C or 'exit' to quit\n"
         f"Models: {config.NEMOTRON_MODEL} / {config.QWEN_MODEL} / {config.OPENAI_MODEL}\n"
         "────────────────────────────────────────────────────────────────────────────────"
     )
