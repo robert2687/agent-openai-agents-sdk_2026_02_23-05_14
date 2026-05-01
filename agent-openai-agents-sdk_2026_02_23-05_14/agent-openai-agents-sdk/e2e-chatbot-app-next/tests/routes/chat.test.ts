@@ -1,7 +1,7 @@
 import { generateUUID, getMessageByErrorCode } from '@chat-template/core';
 import { expect, test } from '../fixtures';
 import { TEST_PROMPTS } from '../prompts/routes';
-import { skipInEphemeralMode, skipInWithDatabaseMode } from 'tests/helpers';
+import { skipInEphemeralMode, skipInWithDatabaseMode } from '../helpers';
 
 const chatIdsCreatedByAda: Array<string> = [];
 

@@ -31,8 +31,8 @@
     "db:check": "drizzle-kit check",
     "db:up": "drizzle-kit up",
     "test": "npm run test:with-db && npm run test:ephemeral",
-    "test:with-db": "PLAYWRIGHT=True TEST_MODE=with-db npx playwright test",
-    "test:ephemeral": "PLAYWRIGHT=True TEST_MODE=ephemeral npx playwright test"
+    "test:with-db": "cross-env PLAYWRIGHT=True TEST_MODE=with-db npx playwright test",
+    "test:ephemeral": "cross-env PLAYWRIGHT=True TEST_MODE=ephemeral npx playwright test"
   },
   "dependencies": {
     "dotenv": "^17.4.2",
@@ -46,6 +46,7 @@
     "@playwright/test": "^1.59.1",
     "@types/node": "^25.6.0",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "msw": "^2.14.2",
     "tsdown": "^0.21.10",
     "typescript": "^6.0.3"

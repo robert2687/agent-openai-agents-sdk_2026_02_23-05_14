@@ -9,7 +9,7 @@ import express, {
 } from 'express';
 import cors from 'cors';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname } from 'node:path';
 import { chatRouter } from './routes/chat';
 import { storeMessageMeta } from './lib/message-meta-store';
@@ -143,7 +143,7 @@ async function startServer() {
       );
       console.log('[Test Mode] Attempting to load MSW from:', modulePath);
 
-      const { mockServer } = await import(modulePath);
+      const { mockServer } = await import(pathToFileURL(modulePath).href);
 
       mockServer.listen({
         onUnhandledRequest: (request: Request) => {
@@ -172,7 +172,7 @@ async function startServer() {
         getLastCapturedRequest,
         resetMlflowAssessmentStore,
         getLastServingRequestHeaders,
-      } = await import(handlersPath);
+      } = await import(pathToFileURL(handlersPath).href);
 
       // Test-only endpoint to get captured requests (for context injection testing)
       app.get('/api/test/captured-requests', (_req, res) => {
