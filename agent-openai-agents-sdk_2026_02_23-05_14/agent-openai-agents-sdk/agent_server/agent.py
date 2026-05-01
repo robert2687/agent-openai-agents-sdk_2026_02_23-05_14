@@ -16,7 +16,7 @@ except ImportError:  # pragma: no cover - optional in OpenAI-only mode
     WorkspaceClient = Any
 
 import mlflow
-from agents import Agent, Runner, set_default_openai_api, set_default_openai_client
+from agents import Agent, ModelSettings, OpenAIChatCompletionsModel, Runner, set_default_openai_api, set_default_openai_client
 from agents.tracing import set_trace_processors
 from mlflow.genai.agent_server import invoke, stream
 from mlflow.types.responses import (
@@ -83,6 +83,7 @@ def _read_float_env(name: str, default: float) -> float:
 
 MAX_RETRIES = max(1, _read_int_env("AGENT_MAX_RETRIES", 3))
 RETRY_BASE_SECONDS = max(0.1, _read_float_env("AGENT_RETRY_BASE_SECONDS", 1.5))
+MAX_TOKENS = _read_int_env("AGENT_MAX_TOKENS", 4096)  # OpenRouter free tier cap
 LOGGER = logging.getLogger(__name__)
 MEMORY_STORE = build_memory_store()
 DEFAULT_MEMORY_TENANT = os.getenv("AGENT_MEMORY_TENANT", "default-tenant")
@@ -100,6 +101,8 @@ Behavior requirements:
 """.strip()
 
 # Databricks models are served via Chat Completions-compatible APIs.
+_OPENAI_CLIENT: AsyncOpenAI | None = None
+
 if USE_DATABRICKS:
     AsyncDatabricksOpenAI, _ = _load_databricks_openai()
     set_default_openai_client(AsyncDatabricksOpenAI())
@@ -107,7 +110,8 @@ if USE_DATABRICKS:
 else:
     # Extension-like mode: standard OpenAI key + model.
     # Optional OPENAI_BASE_URL is supported by the OpenAI SDK.
-    set_default_openai_client(AsyncOpenAI(base_url=os.getenv("OPENAI_BASE_URL") or None))
+    _OPENAI_CLIENT = AsyncOpenAI(base_url=os.getenv("OPENAI_BASE_URL") or None)
+    set_default_openai_client(_OPENAI_CLIENT)
     set_default_openai_api("chat_completions")
 
 set_trace_processors([])  # only use mlflow for trace processing
@@ -132,10 +136,21 @@ def create_coding_agent(mcp_server=None) -> Agent:
 
 def create_coding_agent_for_model(model: str, mcp_server=None) -> Agent:
     mcp_servers = [mcp_server] if mcp_server else []
+    # When using a custom base_url (e.g. OpenRouter), the Agents SDK doesn't
+    # recognise non-standard model name prefixes (e.g. "nvidia/…", "qwen/…").
+    # Wrap in OpenAIChatCompletionsModel so the SDK uses the custom client directly.
+    if _OPENAI_CLIENT is not None and "/" in model:
+        resolved_model = OpenAIChatCompletionsModel(
+            model=model,
+            openai_client=_OPENAI_CLIENT,
+        )
+    else:
+        resolved_model = model  # type: ignore[assignment]
     return Agent(
         name="Code execution agent",
         instructions=CODING_INSTRUCTIONS,
-        model=model,
+        model=resolved_model,
+        model_settings=ModelSettings(max_tokens=MAX_TOKENS),
         mcp_servers=mcp_servers,
     )
 

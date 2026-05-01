@@ -1,18 +1,327 @@
+"""PERFECT-AGENT runner.
+
+Provides:
+- ``chat_with_agent(user_message)`` — single-turn helper used by tests / scripts.
+- ``run_interactive()`` — blocking REPL for terminal use.
+- ``main()`` — CLI entry point (interactive by default; --message for scripting).
+
+Tool-calling loop supports up to ``config.MAX_TOOL_ROUNDS`` rounds so the agent
+can chain multiple tool calls before returning its final answer.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import sys
 from pathlib import Path
 
-from tools.file import read_file
+# Ensure the package root is on sys.path so absolute imports work when run directly.
+_pkg_root = Path(__file__).resolve().parent.parent
+if str(_pkg_root) not in sys.path:
+    sys.path.insert(0, str(_pkg_root))
+
+from dotenv import load_dotenv
+
+# Load .env from the repo root (two levels up from this file) or current dir.
+load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env", override=False)
+load_dotenv(override=False)
+
+from agent import config  # noqa: E402 — after dotenv
+from agent.fallback_client import check_api_keys, fallback_chat  # noqa: E402
+from agent.tools.file import append_file, delete_file, list_dir, read_file, write_file  # noqa: E402
+from agent.tools.http import http_get, http_post  # noqa: E402
+from agent.tools.shell import run as run_shell  # noqa: E402
+
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    stream=sys.stderr,
+)
+LOGGER = logging.getLogger("perfect-agent")
+
+SYSTEM_PROMPT: str = (Path(__file__).with_name("system_prompt.txt")).read_text(encoding="utf-8")
+
+# ── Tool registry ─────────────────────────────────────────────────────────────
+
+_TOOL_MAP: dict = {
+    "read_file": read_file,
+    "write_file": write_file,
+    "append_file": append_file,
+    "delete_file": delete_file,
+    "list_dir": list_dir,
+    "http_get": http_get,
+    "http_post": http_post,
+    "run_shell": run_shell,
+}
+
+TOOL_SCHEMAS: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "Read the full text content of a file.",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string", "description": "Absolute or relative file path."}},
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_file",
+            "description": "Write (overwrite) a file with the given content, creating parent directories if needed.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "content": {"type": "string", "description": "Text content to write."},
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "append_file",
+            "description": "Append text to a file (creates it if missing).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "content": {"type": "string"},
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_file",
+            "description": "Delete a file.",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_dir",
+            "description": "List files and subdirectories inside a directory.",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string", "description": "Directory path (default '.')"}},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "http_get",
+            "description": "Perform an HTTP GET request.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "params": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "timeout": {"type": "integer", "default": config.HTTP_TIMEOUT},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "http_post",
+            "description": "Perform an HTTP POST request with a JSON body.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "json_body": {"type": "object"},
+                    "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+                    "timeout": {"type": "integer", "default": config.HTTP_TIMEOUT},
+                },
+                "required": ["url", "json_body"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_shell",
+            "description": "Execute a shell command and return stdout, stderr, and exit code.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cmd": {
+                        "type": "string",
+                        "description": "Shell command string (e.g. 'ls -la' or 'python script.py').",
+                    },
+                    "timeout": {"type": "integer", "default": config.SHELL_TIMEOUT},
+                    "working_dir": {"type": "string", "description": "Optional working directory."},
+                },
+                "required": ["cmd"],
+            },
+        },
+    },
+]
 
 
-def load_system_prompt() -> str:
-    prompt_path = Path(__file__).with_name("system_prompt.txt")
-    return read_file(str(prompt_path))
+# ── Core agent loop ───────────────────────────────────────────────────────────
 
+def _dispatch_tool(name: str, args: dict) -> str:
+    fn = _TOOL_MAP.get(name)
+    if fn is None:
+        return json.dumps({"error": f"Unknown tool: {name}"})
+    try:
+        result = fn(**args)
+    except Exception as exc:  # noqa: BLE001
+        result = {"error": str(exc)}
+    return json.dumps(result) if not isinstance(result, str) else result
+
+
+def chat_with_agent(user_message: str) -> str:
+    """Run a single user message through the agent and return the final reply.
+
+    Supports multi-step tool-calling up to ``config.MAX_TOOL_ROUNDS`` rounds.
+    """
+    messages: list[dict] = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_message},
+    ]
+
+    for round_idx in range(config.MAX_TOOL_ROUNDS):
+        response = fallback_chat(messages, tools=TOOL_SCHEMAS)
+        msg = response.choices[0].message
+
+        if not msg.tool_calls:
+            return msg.content or ""
+
+        # Append the assistant's tool-calling turn.
+        # Use model_dump() for Pydantic objects (SDK v1+); fall back to raw __dict__.
+        def _tc_to_dict(tc) -> dict:
+            if hasattr(tc, "model_dump"):
+                return tc.model_dump()
+            return {
+                "id": tc.id,
+                "type": "function",
+                "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+            }
+
+        messages.append(
+            {
+                "role": "assistant",
+                "tool_calls": [_tc_to_dict(tc) for tc in msg.tool_calls],
+                "content": msg.content or "",
+            }
+        )
+
+        # Execute all requested tool calls.
+        for call in msg.tool_calls:
+            tool_name = call.function.name
+            try:
+                raw_args = call.function.arguments or "{}"
+                args = json.loads(raw_args)
+            except json.JSONDecodeError:
+                args = {}
+
+            LOGGER.info("Tool call: %s(%s)", tool_name, list(args.keys()))
+            result_content = _dispatch_tool(tool_name, args)
+
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "name": tool_name,
+                    "content": result_content,
+                }
+            )
+
+        LOGGER.debug("Completed tool round %d/%d", round_idx + 1, config.MAX_TOOL_ROUNDS)
+
+    # Max rounds reached — get a final answer without tools.
+    LOGGER.warning("Max tool rounds (%d) reached; requesting final answer.", config.MAX_TOOL_ROUNDS)
+    final = fallback_chat(messages)
+    return final.choices[0].message.content or ""
+
+
+# ── Interactive REPL ──────────────────────────────────────────────────────────
+
+def run_interactive() -> None:
+    """Blocking REPL: read from stdin, print agent responses to stdout."""
+    check_api_keys()
+    print(
+        "PERFECT-AGENT  (Nemotron → Qwen → GPT-4.1 fallback)  |  Ctrl+C or 'exit' to quit\n"
+        f"Models: {config.NEMOTRON_MODEL} / {config.QWEN_MODEL} / {config.OPENAI_MODEL}\n"
+        "────────────────────────────────────────────────────────────────────────────────"
+    )
+    while True:
+        try:
+            user_input = input("\nYou: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nBye.")
+            break
+
+        if not user_input:
+            continue
+        if user_input.lower() in {"exit", "quit", "q"}:
+            print("Bye.")
+            break
+
+        try:
+            reply = chat_with_agent(user_input)
+        except Exception as exc:  # noqa: BLE001
+            print(f"\n[ERROR] {exc}", file=sys.stderr)
+            continue
+
+        print(f"\nAgent:\n\n{reply}")
+
+
+# ── CLI entry point ───────────────────────────────────────────────────────────
 
 def main() -> None:
-    prompt = load_system_prompt()
-    print("PERFECT-AGENT scaffold ready.")
-    print("Loaded system prompt (first 200 chars):")
-    print(prompt[:200])
+    parser = argparse.ArgumentParser(
+        prog="perfect-agent",
+        description="PERFECT-AGENT — deterministic, tool-using assistant.",
+    )
+    parser.add_argument(
+        "--message", "-m",
+        metavar="TEXT",
+        help="Run a single message non-interactively and print the reply.",
+    )
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Enable debug logging to stderr.",
+    )
+    args = parser.parse_args()
+
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    # Validate API keys early so the error is clear.
+    check_api_keys()
+
+    if args.message:
+        try:
+            print(chat_with_agent(args.message))
+        except Exception as exc:  # noqa: BLE001
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        run_interactive()
 
 
 if __name__ == "__main__":
