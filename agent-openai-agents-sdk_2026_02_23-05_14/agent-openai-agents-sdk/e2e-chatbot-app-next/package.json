@@ -35,17 +35,17 @@
     "test:ephemeral": "PLAYWRIGHT=True TEST_MODE=ephemeral npx playwright test"
   },
   "dependencies": {
-    "dotenv": "^17.2.3",
-    "drizzle-kit": "^0.31.5",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
-    "tsx": "^4.19.1"
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
     "@ai-sdk/provider": "^3.0.5",
     "@biomejs/biome": "^2.4.13",
     "@playwright/test": "^1.50.1",
     "@types/node": "^25.6.0",
-    "concurrently": "^8.2.2",
+    "concurrently": "^9.2.1",
     "msw": "^2.11.6",
     "tsdown": "^0.21.10",
     "typescript": "^6.0.3"
