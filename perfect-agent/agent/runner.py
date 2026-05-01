@@ -38,6 +38,9 @@ from agent.skills.git_ops import git_ops  # noqa: E402
 from agent.skills.run_tests import run_tests  # noqa: E402
 from agent.skills.web_search import web_search  # noqa: E402
 from agent.skills.code_review import code_review  # noqa: E402
+from agent.skills.todo_scan import todo_scan  # noqa: E402
+from agent.skills.list_symbols import list_symbols  # noqa: E402
+from agent.skills.dependency_check import dependency_check  # noqa: E402
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -65,6 +68,9 @@ _TOOL_MAP: dict = {
     "run_tests": run_tests,
     "web_search": web_search,
     "code_review": code_review,
+    "todo_scan": todo_scan,
+    "list_symbols": list_symbols,
+    "dependency_check": dependency_check,
 }
 
 TOOL_SCHEMAS: list[dict] = [
@@ -304,6 +310,49 @@ TOOL_SCHEMAS: list[dict] = [
                     "max_line_length": {"type": "integer", "default": 120},
                 },
                 "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "todo_scan",
+            "description": "Scan a directory recursively for TODO/FIXME/HACK markers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "root": {"type": "string", "description": "Root directory to scan (default '.')."},
+                    "max_results": {"type": "integer", "default": 100},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_symbols",
+            "description": "Extract symbols from a source file (Python, JS, TS).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path to a source file."},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dependency_check",
+            "description": "Inspect requirements.txt, pyproject.toml, and package.json dependencies.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "root": {"type": "string", "description": "Project root directory (default '.')."},
+                },
+                "required": [],
             },
         },
     },

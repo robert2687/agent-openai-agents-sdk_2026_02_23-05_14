@@ -3,7 +3,16 @@ import importlib
 from pathlib import Path
 
 from .fallback_client import fallback_chat
-from .skills import search_code, git_ops, run_tests, web_search, code_review
+from .skills import (
+    search_code,
+    git_ops,
+    run_tests,
+    web_search,
+    code_review,
+    todo_scan,
+    list_symbols,
+    dependency_check,
+)
 
 SYSTEM_PROMPT = Path(__file__).with_name("system_prompt.txt").read_text()
 
@@ -22,6 +31,9 @@ _SKILL_MAP = {
     "run_tests": run_tests,
     "web_search": web_search,
     "code_review": code_review,
+    "todo_scan": todo_scan,
+    "list_symbols": list_symbols,
+    "dependency_check": dependency_check,
 }
 
 _SKILL_SCHEMAS = [
@@ -110,6 +122,49 @@ _SKILL_SCHEMAS = [
                     "max_line_length": {"type": "integer"},
                 },
                 "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "todo_scan",
+            "description": "Scan a directory recursively for TODO/FIXME/HACK markers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "root": {"type": "string"},
+                    "max_results": {"type": "integer"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_symbols",
+            "description": "Extract symbols from a source file (Python, JS, TS).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "dependency_check",
+            "description": "Inspect requirements.txt, pyproject.toml, and package.json dependencies.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "root": {"type": "string"},
+                },
+                "required": [],
             },
         },
     },

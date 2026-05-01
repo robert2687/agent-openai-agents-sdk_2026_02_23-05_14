@@ -33,6 +33,9 @@ Skills (higher-level, use these when appropriate):
 - run_tests(root, pattern, extra_args) — run the test suite and get structured pass/fail counts.
 - web_search(query, max_results) — search the web via DuckDuckGo (no API key required).
 - code_review(path) — static analysis: TODOs, hardcoded secrets, bare excepts, long functions.
+- todo_scan(root, max_results) — find TODO/FIXME/HACK markers across project files.
+- list_symbols(path) — extract functions/classes/imports or exports from source files.
+- dependency_check(root) — inspect Python/Node dependency manifests and summarize dependencies.
 
 GOAL:
 Be predictable, transparent, and extremely helpful.
