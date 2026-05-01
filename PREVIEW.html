@@ -57,6 +57,10 @@
     .field input,.field select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 12px;color:var(--text);font-size:.84rem;font-family:var(--font-mono);outline:none;transition:border-color .15s;}
     .field input:focus,.field select:focus{border-color:var(--border-focus);}
     .field .hint{font-size:.72rem;color:var(--text-muted);margin-top:5px;}
+    .model-presets{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px;}
+    .model-preset{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:4px 10px;font-size:.72rem;font-family:var(--font-mono);color:var(--text);cursor:pointer;transition:background .12s,border-color .12s;}
+    .model-preset:hover{background:var(--accent);color:#000;border-color:var(--accent);}
+    .model-preset.active{background:var(--accent);color:#000;border-color:var(--accent);}
     .btn-save{background:var(--accent);color:#000;border:none;border-radius:7px;padding:9px 18px;font-weight:700;font-size:.84rem;cursor:pointer;width:100%;transition:opacity .15s;}
     .btn-save:hover{opacity:.85;}
     .server-info{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:.75rem;font-family:var(--font-mono);display:none;gap:6px;flex-direction:column;}
@@ -237,8 +241,14 @@
     </div>
     <div class="field">
       <label>Model</label>
-      <input id="cfgModel" type="text" value="gpt-4.1-mini" />
-      <div class="hint">Model identifier forwarded with each request.</div>
+      <div class="model-presets">
+        <button class="model-preset" onclick="setModelPreset('nvidia/nemotron-3-super-120b-a12b:free')">Nemotron 120B</button>
+        <button class="model-preset" onclick="setModelPreset('qwen/qwen3-coder:free')">Qwen3-Coder</button>
+        <button class="model-preset" onclick="setModelPreset('google/gemma-3-27b-it:free')">Gemma 3 27B</button>
+        <button class="model-preset" onclick="setModelPreset('meta-llama/llama-4-maverick:free')">Llama 4 Maverick</button>
+      </div>
+      <input id="cfgModel" type="text" value="nvidia/nemotron-3-super-120b-a12b:free" />
+      <div class="hint">Model identifier forwarded with each request. Click a preset or type any OpenRouter model ID.</div>
     </div>
     <div class="field">
       <label>Max Tokens</label>
@@ -467,7 +477,7 @@ UI_PORT=7860</pre></div>
 </main>
 
 <script>
-const CFG={apiUrl:'http://localhost:8000',model:'gpt-4.1-mini',maxTokens:2048,systemPrompt:''};
+const CFG={apiUrl:'http://localhost:8000',model:'nvidia/nemotron-3-super-120b-a12b:free',maxTokens:2048,systemPrompt:''};
 const STORAGE_CFG_KEY='pa_cfg';
 const STORAGE_CHAT_KEY='pa_chat_history';
 
@@ -477,6 +487,7 @@ function loadCfg(){
   document.getElementById('cfgModel').value=CFG.model;
   document.getElementById('cfgMaxTokens').value=CFG.maxTokens;
   document.getElementById('cfgSystemPrompt').value=CFG.systemPrompt;
+  document.querySelectorAll('.model-preset').forEach(b=>b.classList.toggle('active',b.getAttribute('onclick').includes(CFG.model)));
 }
 function saveSettings(){
   CFG.apiUrl=document.getElementById('cfgApiUrl').value.replace(/\/$/,'');
@@ -485,6 +496,10 @@ function saveSettings(){
   CFG.systemPrompt=document.getElementById('cfgSystemPrompt').value.trim();
   localStorage.setItem(STORAGE_CFG_KEY,JSON.stringify(CFG));
   toggleDrawer();checkHealth();
+}
+function setModelPreset(id){
+  document.getElementById('cfgModel').value=id;
+  document.querySelectorAll('.model-preset').forEach(b=>b.classList.toggle('active',b.getAttribute('onclick').includes(id)));
 }
 
 let healthTimer=null;
@@ -618,6 +633,22 @@ function renderMD(text){
 
 function setStatus(t){document.getElementById('statusText').textContent=t;}
 
+function formatApiError(status, rawText){
+  let detail = '';
+  try{
+    const parsed = JSON.parse(rawText || '{}');
+    detail = parsed?.error?.details || parsed?.error?.message || '';
+  }catch{}
+  const merged = (detail || rawText || '').toLowerCase();
+  if(status===401 || merged.includes('user not found') || merged.includes('authentication failed')){
+    return '\u26a0 Authentication failed (HTTP 401). Your OpenRouter key is invalid/revoked for chat calls. Rotate OPENROUTER_API_KEY in .env, restart server, then retry.';
+  }
+  if(status===429 || merged.includes('rate limit')){
+    return '\u26a0 Rate limited by provider (HTTP 429). Wait a moment and retry.';
+  }
+  return '\u26a0 Error: HTTP '+status+(detail?('\n'+detail):'');
+}
+
 async function copyText(text){
   try{
     await navigator.clipboard.writeText(text);
@@ -687,7 +718,11 @@ async function sendMessage(){
       body:JSON.stringify({model:CFG.model,messages,max_tokens:CFG.maxTokens,stream:true}),
       signal:currentAbortController.signal
     });
-    if(!res.ok){const e=await res.text().catch(()=>res.statusText);throw new Error(res.status+' '+e);}
+    if(!res.ok){
+      const e=await res.text().catch(()=>res.statusText);
+      const friendly = formatApiError(res.status, e);
+      throw new Error(friendly);
+    }
     removeTyping();
     const textEl=appendMsg('agent','');
     let full='';

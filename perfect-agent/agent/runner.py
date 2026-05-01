@@ -33,6 +33,11 @@ from agent.fallback_client import check_api_keys, fallback_chat  # noqa: E402
 from agent.tools.file import append_file, delete_file, list_dir, read_file, write_file  # noqa: E402
 from agent.tools.http import http_get, http_post  # noqa: E402
 from agent.tools.shell import run as run_shell  # noqa: E402
+from agent.skills.search_code import search_code  # noqa: E402
+from agent.skills.git_ops import git_ops  # noqa: E402
+from agent.skills.run_tests import run_tests  # noqa: E402
+from agent.skills.web_search import web_search  # noqa: E402
+from agent.skills.code_review import code_review  # noqa: E402
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -54,6 +59,12 @@ _TOOL_MAP: dict = {
     "http_get": http_get,
     "http_post": http_post,
     "run_shell": run_shell,
+    # skills
+    "search_code": search_code,
+    "git_ops": git_ops,
+    "run_tests": run_tests,
+    "web_search": web_search,
+    "code_review": code_review,
 }
 
 TOOL_SCHEMAS: list[dict] = [
@@ -173,6 +184,126 @@ TOOL_SCHEMAS: list[dict] = [
                     "working_dir": {"type": "string", "description": "Optional working directory."},
                 },
                 "required": ["cmd"],
+            },
+        },
+    },
+    # ── Skills ────────────────────────────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "search_code",
+            "description": (
+                "Recursively search for a pattern (literal or regex) across source files in a directory. "
+                "Returns matching lines with file paths and line numbers."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "description": "Search pattern (literal or regex)."},
+                    "root": {"type": "string", "description": "Directory to search (default '.')."},
+                    "is_regex": {"type": "boolean", "default": False},
+                    "case_sensitive": {"type": "boolean", "default": False},
+                    "include_extensions": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Only search files with these extensions, e.g. [\".py\", \".ts\"].",
+                    },
+                    "max_results": {"type": "integer", "default": 50},
+                },
+                "required": ["pattern"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_ops",
+            "description": (
+                "Perform a Git operation on a repository. "
+                "Actions: status, diff, log, add, commit, push, pull, branch, stash."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["status", "diff", "log", "add", "commit", "push", "pull", "branch", "stash"],
+                    },
+                    "path": {"type": "string", "description": "Repository root (default '.')."},
+                    "message": {"type": "string", "description": "Commit message (required for 'commit')."},
+                    "files": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Files to stage for 'add' (default all).",
+                    },
+                    "remote": {"type": "string", "default": "origin"},
+                    "branch": {"type": "string", "description": "Branch name for push/pull/branch."},
+                    "n": {"type": "integer", "default": 10, "description": "Number of log entries."},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_tests",
+            "description": (
+                "Discover and run the project test suite (pytest preferred, fallback to unittest). "
+                "Returns pass/fail counts and failure snippets."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "root": {"type": "string", "description": "Project root directory (default '.')."},
+                    "pattern": {"type": "string", "default": "test_*.py"},
+                    "extra_args": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Extra pytest arguments, e.g. [\"-k\", \"auth\"].",
+                    },
+                    "timeout": {"type": "integer", "default": 120},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": (
+                "Search the web using DuckDuckGo (no API key required). "
+                "Returns titles, URLs, and text snippets."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "max_results": {"type": "integer", "default": 8},
+                    "timeout": {"type": "integer", "default": 15},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "code_review",
+            "description": (
+                "Perform static heuristic analysis on a source file. "
+                "Detects TODOs, hardcoded secrets, bare excepts, overly long functions, "
+                "and other common code smells. Returns findings with line numbers and severity."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path to the source file."},
+                    "max_function_lines": {"type": "integer", "default": 60},
+                    "max_line_length": {"type": "integer", "default": 120},
+                },
+                "required": ["path"],
             },
         },
     },

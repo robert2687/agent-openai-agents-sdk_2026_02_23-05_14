@@ -3,6 +3,7 @@ import importlib
 from pathlib import Path
 
 from .fallback_client import fallback_chat
+from .skills import search_code, git_ops, run_tests, web_search, code_review
 
 SYSTEM_PROMPT = Path(__file__).with_name("system_prompt.txt").read_text()
 
@@ -14,8 +15,109 @@ TOOLS = {
     "run_shell": "local_agents.perfect_agent.tools.shell:run",
 }
 
+# Skills are callables loaded directly (not via importlib string paths)
+_SKILL_MAP = {
+    "search_code": search_code,
+    "git_ops": git_ops,
+    "run_tests": run_tests,
+    "web_search": web_search,
+    "code_review": code_review,
+}
+
+_SKILL_SCHEMAS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_code",
+            "description": "Search for a pattern across source files. Returns file:line:snippet matches.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string"},
+                    "root": {"type": "string"},
+                    "is_regex": {"type": "boolean"},
+                    "case_sensitive": {"type": "boolean"},
+                    "include_extensions": {"type": "array", "items": {"type": "string"}},
+                    "max_results": {"type": "integer"},
+                },
+                "required": ["pattern"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_ops",
+            "description": "Git operations: status, diff, log, add, commit, push, pull, branch, stash.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["status", "diff", "log", "add", "commit", "push", "pull", "branch", "stash"]},
+                    "path": {"type": "string"},
+                    "message": {"type": "string"},
+                    "files": {"type": "array", "items": {"type": "string"}},
+                    "remote": {"type": "string"},
+                    "branch": {"type": "string"},
+                    "n": {"type": "integer"},
+                },
+                "required": ["action"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_tests",
+            "description": "Run the test suite (pytest/unittest) and return structured pass/fail results.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "root": {"type": "string"},
+                    "pattern": {"type": "string"},
+                    "extra_args": {"type": "array", "items": {"type": "string"}},
+                    "timeout": {"type": "integer"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web via DuckDuckGo (no API key). Returns title, url, snippet.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "max_results": {"type": "integer"},
+                    "timeout": {"type": "integer"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "code_review",
+            "description": "Static analysis of a source file: TODOs, hardcoded secrets, long functions, bare excepts.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "max_function_lines": {"type": "integer"},
+                    "max_line_length": {"type": "integer"},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+]
 
 def load_tool(name):
+    if name in _SKILL_MAP:
+        return _SKILL_MAP[name]
     module_path, func_name = TOOLS[name].split(":")
     module = importlib.import_module(module_path)
     return getattr(module, func_name)
@@ -26,7 +128,8 @@ def call_tool(name, args):
 
 
 def tool_schemas():
-    return [{"type": "function", "function": {"name": name}} for name in TOOLS]
+    base = [{"type": "function", "function": {"name": name}} for name in TOOLS]
+    return base + _SKILL_SCHEMAS
 
 def chat_with_agent(user_message):
     messages = [

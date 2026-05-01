@@ -32,24 +32,28 @@ if OPENROUTER_API_KEY and OPENROUTER_API_KEY not in ("your-openrouter-key", ""):
     BACKEND    = "openrouter"
     API_KEY    = OPENROUTER_API_KEY
     BASE_URL   = "https://openrouter.ai/api/v1"
-    MODEL      = os.getenv("AGENT_MODEL", "tencent/hy3-preview:free")
+    MODEL      = os.getenv("AGENT_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
+    FALLBACK_MODEL = os.getenv("AGENT_FALLBACK_MODEL", "qwen/qwen3-coder:free")
 elif OPENAI_API_KEY and OPENAI_API_KEY not in ("your-openai-key", ""):
     BACKEND    = "openai"
     API_KEY    = OPENAI_API_KEY
     BASE_URL   = "https://api.openai.com/v1"
     MODEL      = os.getenv("AGENT_MODEL", "gpt-4.1-mini")
+    FALLBACK_MODEL = os.getenv("AGENT_FALLBACK_MODEL", "gpt-4.1")
 else:
     BACKEND    = "none"
     API_KEY    = ""
     BASE_URL   = ""
     MODEL      = os.getenv("AGENT_MODEL", "gpt-4.1-mini")
+    FALLBACK_MODEL = os.getenv("AGENT_FALLBACK_MODEL", "")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOGGER = logging.getLogger("standalone_server")
 LOGGER.info(
-    "Backend: %s | Model: %s | Port: %d | EnvFile: %s",
+    "Backend: %s | Model: %s | Fallback: %s | Port: %d | EnvFile: %s",
     BACKEND,
     MODEL,
+    FALLBACK_MODEL,
     PORT,
     ENV_FILE,
 )
@@ -71,7 +75,7 @@ async def health() -> dict:
         "status": "ok",
         "backend": BACKEND,
         "model": MODEL,
-        "fallback_model": None,
+        "fallback_model": FALLBACK_MODEL or None,
         "max_retries": 3,
         "retry_base_seconds": 1.5,
         "env_file": str(ENV_FILE),
@@ -84,7 +88,8 @@ async def chat_completions(request: Request):
     body = await request.json()
     stream = body.get("stream", False)
     messages = body.get("messages", [])
-    model = body.get("model", MODEL)
+    # Allow caller to override model; otherwise use server default
+    model = body.get("model") or MODEL
     max_tokens = body.get("max_tokens", 2048)
 
     if BACKEND == "none":
@@ -109,30 +114,58 @@ async def chat_completions(request: Request):
             },
         )
 
+        async def try_complete(active_model: str):
+            """Non-streaming completion with one model."""
+            return await client.chat.completions.create(
+                model=active_model,
+                messages=messages,
+                max_tokens=max_tokens,
+                stream=False,
+            )
+
         if stream:
             async def event_stream() -> AsyncGenerator[bytes, None]:
-                try:
-                    async with client.chat.completions.stream(
-                        model=model,
-                        messages=messages,
-                        max_tokens=max_tokens,
-                    ) as stream_ctx:
-                        async for event in stream_ctx:
-                            chunk_dict = event.model_dump(exclude_unset=False)
-                            # Only forward delta chunks with choices
-                            if chunk_dict.get("choices"):
-                                yield f"data: {json.dumps(chunk_dict)}\n\n".encode()
-                except Exception as exc:
+                models_to_try = [model]
+                if FALLBACK_MODEL and FALLBACK_MODEL != model:
+                    models_to_try.append(FALLBACK_MODEL)
+                last_exc = None
+                for attempt_model in models_to_try:
+                    try:
+                        async with client.chat.completions.stream(
+                            model=attempt_model,
+                            messages=messages,
+                            max_tokens=max_tokens,
+                        ) as stream_ctx:
+                            async for event in stream_ctx:
+                                chunk_dict = event.model_dump(exclude_unset=False)
+                                # Only forward delta chunks with choices
+                                if chunk_dict.get("choices"):
+                                    yield f"data: {json.dumps(chunk_dict)}\n\n".encode()
+                        return  # success — stop trying
+                    except AuthenticationError as exc:
+                        # Auth errors are not recoverable; surface immediately
+                        err = {
+                            "error": {
+                                "message": str(exc),
+                                "type": "authentication_error",
+                                "request_id": request_id,
+                            }
+                        }
+                        yield f"data: {json.dumps(err)}\n\n".encode()
+                        return
+                    except Exception as exc:
+                        LOGGER.warning("Model %s failed, trying next. Error: %s", attempt_model, exc)
+                        last_exc = exc
+                if last_exc:
                     err = {
                         "error": {
-                            "message": str(exc),
+                            "message": str(last_exc),
                             "type": "api_error",
                             "request_id": request_id,
                         }
                     }
                     yield f"data: {json.dumps(err)}\n\n".encode()
-                finally:
-                    yield b"data: [DONE]\n\n"
+                yield b"data: [DONE]\n\n"
 
             return StreamingResponse(
                 event_stream(),
@@ -144,13 +177,21 @@ async def chat_completions(request: Request):
             )
 
         else:
-            response = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                stream=False,
-            )
-            return JSONResponse(content=response.model_dump())
+            # Non-streaming: try primary, then fallback
+            models_to_try = [model]
+            if FALLBACK_MODEL and FALLBACK_MODEL != model:
+                models_to_try.append(FALLBACK_MODEL)
+            last_exc = None
+            for attempt_model in models_to_try:
+                try:
+                    response = await try_complete(attempt_model)
+                    return JSONResponse(content=response.model_dump())
+                except AuthenticationError:
+                    raise  # re-raise; handled below
+                except Exception as exc:
+                    LOGGER.warning("Model %s failed, trying fallback. Error: %s", attempt_model, exc)
+                    last_exc = exc
+            raise last_exc  # all models failed
 
     except AuthenticationError as exc:
         LOGGER.error("Authentication failed in /v1/chat/completions request_id=%s: %s", request_id, exc)
