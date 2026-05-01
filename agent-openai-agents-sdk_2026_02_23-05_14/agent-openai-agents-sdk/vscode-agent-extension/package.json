@@ -10,13 +10,6 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onCommand:perfectAgent.openChat",
-    "onCommand:perfectAgent.explainCurrentFile",
-    "onCommand:perfectAgent.summarizeSelection",
-    "onCommand:perfectAgent.checkBackendHealth",
-    "onCommand:perfectAgent.proposePatch"
-  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
