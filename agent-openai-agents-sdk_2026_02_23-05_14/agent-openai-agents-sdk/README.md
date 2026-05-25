@@ -9,6 +9,19 @@ The backend exposes an MLflow ResponsesAgent-compatible API, a health endpoint, 
 
 ## Local/OpenAI quick start
 
+### Works on Windows, macOS, and Linux
+
+Use the same runtime commands on every OS:
+
+- `uv sync`
+- `uv run verify-setup`
+- `uv run start-server --reload`
+
+Environment file copy examples:
+
+- macOS/Linux: `cp .env.example .env`
+- Windows PowerShell: `Copy-Item .env.example .env`
+
 ```bash
 cp .env.example .env
 # set OPENAI_API_KEY in .env
@@ -28,6 +41,23 @@ Optional local UI stack:
 ```bash
 docker compose up --build
 ```
+
+## Browser extension (Chrome + Edge)
+
+This repository now includes a Chromium WebExtension in [`browser-extension/`](./browser-extension/).
+
+Load unpacked in:
+
+- Chrome: `chrome://extensions`
+- Edge: `edge://extensions`
+
+Package a distributable zip:
+
+```bash
+uv run package-browser-extension
+```
+
+See full instructions in [`browser-extension/README.md`](./browser-extension/README.md).
 
 ## Databricks quick start
 

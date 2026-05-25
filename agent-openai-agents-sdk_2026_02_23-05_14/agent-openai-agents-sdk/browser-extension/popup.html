@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PERFECT Agent</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>PERFECT Agent</h1>
+      <button id="openOptions" title="Settings">⚙</button>
+    </header>
+
+    <div class="row">
+      <button id="health">Health</button>
+      <span id="status">Unknown</span>
+    </div>
+
+    <div id="messages" class="messages"></div>
+
+    <div class="composer">
+      <textarea id="prompt" placeholder="Ask the agent..."></textarea>
+      <button id="send">Send</button>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,98 @@
+:root {
+  --bg: #0f1720;
+  --panel: #1a2532;
+  --border: #2f445e;
+  --text: #e7eef8;
+  --muted: #9fb4cb;
+  --accent: #4ad6a4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 390px;
+  min-height: 480px;
+  margin: 0;
+  padding: 10px;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+button,
+textarea {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+button {
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+#status {
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.messages {
+  min-height: 300px;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #121d2a;
+  padding: 8px;
+}
+
+.message {
+  white-space: pre-wrap;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.message.user {
+  border-color: #3f7fcc;
+}
+
+.message.assistant {
+  border-color: #8a6fd1;
+}
+
+.composer {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+
+#prompt {
+  flex: 1;
+  min-height: 70px;
+  padding: 8px;
+  resize: vertical;
+}

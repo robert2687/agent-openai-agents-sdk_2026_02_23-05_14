@@ -9,6 +9,12 @@ uv run verify-setup
 uv run start-server --reload
 ```
 
+Windows PowerShell for env file copy:
+
+```powershell
+Copy-Item .env.example .env
+```
+
 ## Databricks setup
 
 ```bash
@@ -59,6 +65,19 @@ uv run pytest tests/test_smoke_endpoints.py
 uv run pytest
 ```
 
+## Browser extension (Chrome + Edge)
+
+```bash
+# Package browser extension zip
+uv run package-browser-extension
+```
+
+Load unpacked extension folder:
+
+- Chrome: `chrome://extensions`
+- Edge: `edge://extensions`
+- Select `browser-extension/`
+
 ## Optional Databricks commands
 
 ```bash
@@ -79,7 +98,10 @@ verify_setup.py
 docker-compose.yml
 ```
 
-# Source the aliases
+## Alias helpers
+
+```bash
+# Source aliases in your shell profile
 source ~/.bashrc
 
 # Now use:

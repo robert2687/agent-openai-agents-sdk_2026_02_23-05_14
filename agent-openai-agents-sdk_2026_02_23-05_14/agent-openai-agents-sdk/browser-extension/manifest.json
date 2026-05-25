@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "PERFECT Agent Browser Assistant",
+  "version": "0.1.0",
+  "description": "Chat with your local PERFECT Agent backend from Chrome and Microsoft Edge.",
+  "action": {
+    "default_title": "PERFECT Agent",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ]
+}

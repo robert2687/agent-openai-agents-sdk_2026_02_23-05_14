@@ -23,6 +23,12 @@ If you do not use `uv`, install the package in editable mode with pip.
 cp .env.example .env
 ```
 
+Windows PowerShell equivalent:
+
+```powershell
+Copy-Item .env.example .env
+```
+
 Set these values:
 
 ```bash
@@ -64,6 +70,23 @@ This starts:
 
 - API on `http://localhost:8000`
 - Gradio UI on `http://localhost:7860`
+
+## Browser extension (Chrome + Edge)
+
+After your backend is running, you can use the included browser extension.
+
+1. Open Chrome or Edge extensions page:
+  - Chrome: `chrome://extensions`
+  - Edge: `edge://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked** and choose `browser-extension/`
+4. Open extension settings (⚙) and confirm the backend URL (default `http://localhost:8000`)
+
+To package a zip for distribution:
+
+```bash
+uv run package-browser-extension
+```
 
 ## Databricks mode
 

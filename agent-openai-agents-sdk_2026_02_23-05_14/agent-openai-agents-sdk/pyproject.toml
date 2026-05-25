@@ -43,6 +43,7 @@ start-app = "scripts.start_app:main"
 start-server = "agent_server.start_server:main"
 agent-evaluate = "agent_server.evaluate_agent:evaluate"
 discover-tools = "scripts.discover_tools:main"
+package-browser-extension = "scripts.package_browser_extension:main"
 
 [tool.setuptools.package-data]
 "local_agents.perfect_agent" = ["system_prompt.txt"]
