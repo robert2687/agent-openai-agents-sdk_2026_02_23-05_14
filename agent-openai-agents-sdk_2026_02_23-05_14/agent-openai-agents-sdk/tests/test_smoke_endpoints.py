@@ -72,3 +72,28 @@ def test_invocations_non_stream_success_with_mock(monkeypatch):
     assert "output" in payload
     assert isinstance(payload["output"], list)
     assert payload["output"][0]["type"] == "message"
+
+
+def test_invocations_returns_guidance_when_openai_key_missing(monkeypatch):
+    app = _load_app()
+    client = TestClient(app)
+
+    agent_module = importlib.import_module("agent_server.agent")
+
+    async def fake_run_with_retries(messages, mcp_server=None):  # noqa: ARG001
+        raise RuntimeError(
+            "OpenAI backend is not configured. Set OPENAI_API_KEY (or OPENAI_ADMIN_KEY) and restart the server."
+        )
+
+    monkeypatch.setattr(agent_module, "_run_with_retries", fake_run_with_retries)
+
+    response = client.post(
+        "/invocations",
+        json={"input": [{"role": "user", "content": "hello"}]},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert "output" in payload
+    assert payload["output"]
+    assert "OpenAI backend is not configured" in payload["output"][0]["content"][0]["text"]

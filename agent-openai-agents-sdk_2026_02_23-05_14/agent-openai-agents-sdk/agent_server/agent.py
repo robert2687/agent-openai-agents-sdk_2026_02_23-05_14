@@ -278,6 +278,26 @@ def _response_text(output_items: list[dict]) -> str:
     return "\n".join(chunks).strip()
 
 
+def _missing_credentials_output() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": "msg-config-missing",
+            "type": "message",
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": (
+                        "OpenAI backend is not configured yet. "
+                        "Set OPENAI_API_KEY (or OPENAI_ADMIN_KEY), restart the server, "
+                        "and retry your request."
+                    ),
+                }
+            ],
+        }
+    ]
+
+
 async def _persist_memory(messages: list[dict], output_items: list[dict]) -> None:
     """Persist simple request/response memory with safe fallbacks.
 
@@ -319,10 +339,17 @@ async def invoke_handler(request: ResponsesAgentRequest) -> ResponsesAgentRespon
             await _persist_memory(messages, output_items)
             return ResponsesAgentResponse(output=output_items)
 
-    result = await _run_with_retries(messages)
-    output_items = sanitize_output_items(result.new_items)
-    await _persist_memory(messages, output_items)
-    return ResponsesAgentResponse(output=output_items)
+    try:
+        result = await _run_with_retries(messages)
+        output_items = sanitize_output_items(result.new_items)
+        await _persist_memory(messages, output_items)
+        return ResponsesAgentResponse(output=output_items)
+    except RuntimeError as exc:
+        if "OpenAI backend is not configured" not in str(exc):
+            raise
+
+        LOGGER.warning("Invocation fallback due to missing OpenAI credentials: %s", exc)
+        return ResponsesAgentResponse(output=_missing_credentials_output())
 
 
 @stream()

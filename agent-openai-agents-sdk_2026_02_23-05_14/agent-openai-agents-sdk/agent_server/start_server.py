@@ -8,6 +8,7 @@ os.environ.setdefault("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db")
 
 from dotenv import load_dotenv
 from fastapi import Request
+from fastapi.responses import Response
 from fastapi.responses import JSONResponse
 from mlflow.genai.agent_server import AgentServer, setup_mlflow_git_based_version_tracking
 from agent_server.client_contract import build_client_contract
@@ -100,6 +101,22 @@ async def health() -> dict:
         "max_retries": agent_module.MAX_RETRIES,
         "retry_base_seconds": agent_module.RETRY_BASE_SECONDS,
     }
+
+
+@app.get("/")
+async def root() -> dict:
+    return {
+        "service": "agent-openai-agents-sdk",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health",
+        "invocations": "/invocations",
+    }
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/client-capabilities")
