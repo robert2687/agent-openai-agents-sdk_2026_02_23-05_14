@@ -1,6 +1,19 @@
 version: "3.9"
 
 services:
+  cosmosdb:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator
+    container_name: cosmosdb-emulator
+    restart: unless-stopped
+    environment:
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: 3
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "true"
+    ports:
+      - "8081:8081"
+      - "10250-10255:10250-10255"
+    volumes:
+      - cosmosdata:/data
+
   api:
     build:
       context: .
@@ -31,3 +44,6 @@ services:
       - api
     ports:
       - "${UI_PORT:-7860}:7860"
+
+volumes:
+  cosmosdata:

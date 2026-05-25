@@ -1,10 +1,27 @@
 {
-    "name": "PERFECT-AGENT Devcontainer",
-    "image": "mcr.microsoft.com/devcontainers/python:3.11",
-    "postCreateCommand": "scripts/demo_up.sh",
+    "name": "GrantSystem Dev",
+    "image": "mcr.microsoft.com/devcontainers/universal:2",
+    "features": {
+        "ghcr.io/devcontainers/features/azure-cli:1": {},
+        "ghcr.io/devcontainers/features/node:1": {
+            "version": "lts"
+        }
+    },
+    "postCreateCommand": "bash .devcontainer/setup-cosmos.sh",
     "customizations": {
         "vscode": {
+            "settings": {
+                "cosmosDB.shell.path": "",
+                "cosmosDB.defaultExperience": "SQL",
+                "cosmosDB.showExplorer": true,
+                "cosmosDB.enableMongoShell": false,
+                "cosmosDB.mongoShellPath": "",
+                "cosmosDB.postgresClientPath": ""
+            },
             "extensions": [
+                "ms-azuretools.vscode-cosmosdb",
+                "ms-azuretools.vscode-azurefunctions",
+                "ms-vscode.azurecli",
                 "ms-python.python",
                 "ms-python.vscode-pylance"
             ]
