@@ -75,12 +75,10 @@ This starts:
 
 After your backend is running, you can use the included browser extension.
 
-1. Open Chrome or Edge extensions page:
-  - Chrome: `chrome://extensions`
-  - Edge: `edge://extensions`
-2. Enable **Developer mode**
-3. Click **Load unpacked** and choose `browser-extension/`
-4. Open extension settings (⚙) and confirm the backend URL (default `http://localhost:8000`)
+1. Open Chrome extensions page: `chrome://extensions` (or Edge extensions page: `edge://extensions`).
+2. Enable **Developer mode**.
+3. Click **Load unpacked** and choose `browser-extension/`.
+4. Open extension settings (⚙) and confirm the backend URL (default `http://localhost:8000`).
 
 To package a zip for distribution:
 
