@@ -85,23 +85,24 @@ uv run quickstart --backend databricks
 - [CHECKLIST.md](./CHECKLIST.md)
 - [COMMANDS.md](./COMMANDS.md)
 - [API.md](./API.md)
-   ```
 
-   - Example streaming request:
+Example API calls:
 
-     ```bash
-     curl -X POST http://localhost:8000/invocations \
-     -H "Content-Type: application/json" \
-     -d '{ "input": [{ "role": "user", "content": "hi" }], "stream": true }'
-     ```
+Streaming request:
 
-   - Example non-streaming request:
+```bash
+curl -X POST http://localhost:8000/invocations \
+-H "Content-Type: application/json" \
+-d '{ "input": [{ "role": "user", "content": "hi" }], "stream": true }'
+```
 
-     ```bash
-     curl -X POST http://localhost:8000/invocations  \
-     -H "Content-Type: application/json" \
-     -d '{ "input": [{ "role": "user", "content": "hi" }] }'
-     ```
+Non-streaming request:
+
+```bash
+curl -X POST http://localhost:8000/invocations \
+-H "Content-Type: application/json" \
+-d '{ "input": [{ "role": "user", "content": "hi" }] }'
+```
 
 ## Modifying your agent
 
