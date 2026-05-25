@@ -35,7 +35,8 @@ from agent_server.memory_store import build_memory_store
 
 BACKEND = os.getenv("AGENT_BACKEND", "").strip().lower()
 if BACKEND not in {"databricks", "openai"}:
-    BACKEND = "openai" if os.getenv("OPENAI_API_KEY") else "databricks"
+    # Default to local/OpenAI mode when not explicitly configured.
+    BACKEND = "openai"
 
 USE_DATABRICKS = BACKEND == "databricks"
 MODEL = os.getenv(
@@ -102,17 +103,24 @@ Behavior requirements:
 
 # Databricks models are served via Chat Completions-compatible APIs.
 _OPENAI_CLIENT: AsyncOpenAI | None = None
+OPENAI_CREDENTIALS_CONFIGURED = bool(os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_ADMIN_KEY"))
 
 if USE_DATABRICKS:
     AsyncDatabricksOpenAI, _ = _load_databricks_openai()
     set_default_openai_client(AsyncDatabricksOpenAI())
     set_default_openai_api("chat_completions")
 else:
-    # Extension-like mode: standard OpenAI key + model.
-    # Optional OPENAI_BASE_URL is supported by the OpenAI SDK.
-    _OPENAI_CLIENT = AsyncOpenAI(base_url=os.getenv("OPENAI_BASE_URL") or None)
-    set_default_openai_client(_OPENAI_CLIENT)
-    set_default_openai_api("chat_completions")
+    if OPENAI_CREDENTIALS_CONFIGURED:
+        # Extension-like mode: standard OpenAI key + model.
+        # Optional OPENAI_BASE_URL is supported by the OpenAI SDK.
+        _OPENAI_CLIENT = AsyncOpenAI(base_url=os.getenv("OPENAI_BASE_URL") or None)
+        set_default_openai_client(_OPENAI_CLIENT)
+        set_default_openai_api("chat_completions")
+    else:
+        LOGGER.warning(
+            "OPENAI_API_KEY/OPENAI_ADMIN_KEY is not set. Server can start, but /invocations will fail "
+            "until OpenAI credentials are configured."
+        )
 
 set_trace_processors([])  # only use mlflow for trace processing
 if os.getenv("AGENT_ENABLE_MLFLOW_AUTOLOG", "0") == "1":
@@ -135,6 +143,11 @@ def create_coding_agent(mcp_server=None) -> Agent:
 
 
 def create_coding_agent_for_model(model: str, mcp_server=None) -> Agent:
+    if not USE_DATABRICKS and _OPENAI_CLIENT is None:
+        raise RuntimeError(
+            "OpenAI backend is not configured. Set OPENAI_API_KEY (or OPENAI_ADMIN_KEY) and restart the server."
+        )
+
     mcp_servers = [mcp_server] if mcp_server else []
     # When using a custom base_url (e.g. OpenRouter), the Agents SDK doesn't
     # recognise non-standard model name prefixes (e.g. "nvidia/…", "qwen/…").

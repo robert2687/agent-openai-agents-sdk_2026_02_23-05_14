@@ -93,6 +93,7 @@ async def health() -> dict:
     return {
         "status": "ok",
         "backend": agent_module.BACKEND,
+        "openai_credentials_configured": agent_module.OPENAI_CREDENTIALS_CONFIGURED,
         "databricks_tools_enabled": agent_module.USE_DATABRICKS,
         "model": agent_module.MODEL,
         "fallback_model": agent_module.FALLBACK_MODEL or None,
@@ -115,3 +116,7 @@ async def client_capabilities() -> dict:
 
 def main():
     agent_server.run(app_import_string="agent_server.start_server:app")
+
+
+if __name__ == "__main__":
+    main()
