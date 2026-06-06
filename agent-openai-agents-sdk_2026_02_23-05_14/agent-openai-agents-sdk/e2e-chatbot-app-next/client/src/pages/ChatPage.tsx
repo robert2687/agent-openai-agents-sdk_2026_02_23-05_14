@@ -63,9 +63,9 @@ export default function ChatPage() {
   // Show loading if no data or if data doesn't match current ID (stale data)
   if (!chatData || chatData.chat.id !== id) {
     return (
-      <div className="flex h-screen justify-center flex-col">
+      <div className='flex h-screen flex-col justify-center'>
         <ChatHeader empty />
-        <div className="text-muted-foreground flex-1 flex items-center justify-center">Loading chat...</div>
+        <div className='flex flex-1 items-center justify-center text-muted-foreground'>Loading chat...</div>
       </div>
     );
   }

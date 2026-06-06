@@ -28,13 +28,13 @@ export const MessageError = ({ error }: { error: string }) => {
       animate={{ opacity: 1, y: 0 }}
       className="relative w-full"
     >
-      <div className="flex gap-1.5 items-center mb-1">
+      <div className='mb-1 flex items-center gap-1.5'>
         <div className="text-destructive">
           <WarningIcon size={14} />
         </div>
-        <span className="font-medium text-destructive text-base">Error</span>
+        <span className='font-medium text-base text-destructive'>Error</span>
       </div>
-      <div className="rounded-xl overflow-hidden border border-destructive/40">
+      <div className='overflow-hidden rounded-xl border border-destructive/40'>
         <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-muted p-2.5 font-mono text-foreground">
           {formatted}
         </pre>

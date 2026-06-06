@@ -63,7 +63,7 @@ export function DbIcon({
         <Icon
           width={size}
           height={size}
-          className="[&_path]:fill-[url(#db-ai-gradient)] [&_circle]:fill-[url(#db-ai-gradient)]"
+          className='[&_circle]:fill-[url(#db-ai-gradient)] [&_path]:fill-[url(#db-ai-gradient)]'
           aria-hidden
         />
       </span>

@@ -5,7 +5,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
-import { BrainIcon, ChevronDownIcon } from 'lucide-react';
+import { ChevronDownIcon } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { createContext, memo, useContext, useEffect, useState } from 'react';
 import { Response } from './response';
@@ -117,7 +117,7 @@ export const ReasoningTrigger = memo(
     return (
       <CollapsibleTrigger
         className={cn(
-          'flex items-center gap-1.5 text-base font-medium transition-colors hover:text-foreground cursor-pointer',
+          'flex cursor-pointer items-center gap-1.5 font-medium text-base transition-colors hover:text-foreground',
           className,
         )}
         {...props}
@@ -149,9 +149,9 @@ export const ReasoningContent = memo(
   ({ className, children, ...props }: ReasoningContentProps) => (
     <CollapsibleContent
       className={cn(
-        'mt-2 text-muted-foreground text-base',
+        'mt-2 text-base text-muted-foreground',
         'data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 outline-hidden data-[state=closed]:animate-out data-[state=open]:animate-in',
-        'border-l-1 pl-4 border-border',
+        'border-border border-l-1 pl-4',
         className,
       )}
       {...props}

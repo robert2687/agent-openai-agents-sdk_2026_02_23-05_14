@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import type { ChatStatus } from 'ai';
-import { Loader2Icon, SendIcon, SquareIcon, XIcon } from 'lucide-react';
+import { Loader2Icon, SquareIcon, XIcon } from 'lucide-react';
 import {
   forwardRef,
   type ComponentProps,
@@ -10,7 +10,7 @@ import {
   type KeyboardEventHandler,
 } from 'react';
 import { DbIcon } from '../ui/db-icon';
-import { ChevronDownIcon, ChevronUpIcon } from '../icons';
+import { ChevronDownIcon, } from '../icons';
 
 type PromptInputProps = HTMLAttributes<HTMLFormElement>;
 

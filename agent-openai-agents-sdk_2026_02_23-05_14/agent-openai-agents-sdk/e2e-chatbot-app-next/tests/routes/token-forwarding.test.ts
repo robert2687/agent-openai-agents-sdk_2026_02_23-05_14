@@ -1,5 +1,5 @@
 import { expect, test } from '../fixtures';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 
 function chatRequestBody() {
   return {
@@ -33,8 +33,8 @@ test.describe('OBO Token Forwarding', () => {
     const headers = await headersResponse.json();
 
     // Authorization should be set (SP token)
-    expect(headers['authorization']).toBeDefined();
-    expect(headers['authorization']).toMatch(/^Bearer .+/);
+    expect(headers.authorization).toBeDefined();
+    expect(headers.authorization).toMatch(/^Bearer .+/);
     // Should NOT contain a user OBO token
     expect(headers['x-forwarded-access-token']).toBeUndefined();
   });
@@ -58,7 +58,7 @@ test.describe('OBO Token Forwarding', () => {
     const headers = await headersResponse.json();
 
     // User token should be used for Authorization
-    expect(headers['authorization']).toBe(`Bearer ${fakeUserToken}`);
+    expect(headers.authorization).toBe(`Bearer ${fakeUserToken}`);
     // x-forwarded-access-token should still be present (not stripped)
     expect(headers['x-forwarded-access-token']).toBe(fakeUserToken);
   });

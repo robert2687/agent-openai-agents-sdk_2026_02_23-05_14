@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: perfect-agent
+Version: 0.2.0
+Summary: PERFECT-AGENT — deterministic, tool-using assistant with Nemotron → Qwen → GPT-4.1 fallback.
+Author-email: Agent Developer <developer@example.com>
+Requires-Python: >=3.10
+Requires-Dist: openai>=1.0
+Requires-Dist: requests>=2.28
+Requires-Dist: python-dotenv>=1.0

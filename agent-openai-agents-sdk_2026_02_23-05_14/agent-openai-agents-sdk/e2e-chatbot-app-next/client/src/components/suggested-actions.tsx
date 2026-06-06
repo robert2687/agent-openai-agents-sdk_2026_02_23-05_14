@@ -33,7 +33,7 @@ function PureSuggestedActions({ chatId, sendMessage }: SuggestedActionsProps) {
           exit={{ opacity: 0, y: 20 }}
           transition={{ delay: 0.05 * index }}
           key={suggestedAction}
-          className="border-b border-border"
+          className='border-border border-b'
         >
           <Suggestion
             suggestion={suggestedAction}
@@ -45,7 +45,7 @@ function PureSuggestedActions({ chatId, sendMessage }: SuggestedActionsProps) {
                 parts: [{ type: 'text', text: suggestion }],
               });
             }}
-            className="h-auto w-full justify-start gap-2 rounded-none border-0 bg-transparent py-2 pl-0 text-left text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-foreground"
+            className='h-auto w-full justify-start gap-2 rounded-none border-0 bg-transparent py-2 pl-0 text-left font-normal text-muted-foreground text-sm hover:bg-transparent hover:text-foreground'
           >
             <LightbulbIcon size={16} className="shrink-0 text-muted-foreground" aria-hidden />
             {suggestedAction}

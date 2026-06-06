@@ -24,10 +24,10 @@ function OboScopeBanner({ missingScopes }: { missingScopes: string[] }) {
   if (missingScopes.length === 0) return null;
 
   return (
-    <div className="w-full border-b border-red-500/20 bg-red-50 dark:bg-red-950/20 px-4 py-2.5">
+    <div className='w-full border-red-500/20 border-b bg-red-50 px-4 py-2.5 dark:bg-red-950/20'>
       <div className="flex items-center gap-2">
         <TriangleAlert className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
-        <p className="text-sm text-red-700 dark:text-red-400">
+        <p className='text-red-700 text-sm dark:text-red-400'>
           This endpoint requires on-behalf-of user authorization. Add these
           scopes to your app:{' '}
           <strong>{missingScopes.join(', ')}</strong>.{' '}
@@ -52,7 +52,7 @@ export function ChatHeader({ title, empty, isLoadingTitle }: { title?: string, e
   return (
     <>
       <header className={cn("sticky top-0 flex h-[60px] items-center gap-2 bg-background px-4", {
-        "border-b border-border md:pb-2": !empty,
+        'border-border border-b md:pb-2': !empty,
       })}>
         {/* Toggle visible on mobile only — desktop toggle lives inside the sidebar */}
         <div className="md:hidden">
@@ -60,9 +60,9 @@ export function ChatHeader({ title, empty, isLoadingTitle }: { title?: string, e
         </div>
 
         {(title || isLoadingTitle) &&
-          <h4 className="text-[16px] font-medium truncate">
+          <h4 className='truncate font-medium text-[16px]'>
             {isLoadingTitle ?
-              <Skeleton className="w-32 h-6 bg-border" /> :
+              <Skeleton className='h-6 w-32 bg-border' /> :
               title
             }
           </h4>
@@ -77,7 +77,7 @@ export function ChatHeader({ title, empty, isLoadingTitle }: { title?: string, e
                     href={DOCS_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg border-border border-1 bg-muted px-2 py-1 text-foreground text-xs hover:text-foreground"
+                    className='flex items-center gap-1.5 rounded-lg border-1 border-border bg-muted px-2 py-1 text-foreground text-xs hover:text-foreground'
                   >
                     <CloudOffIcon className="h-3 w-3" />
                     <span className="hidden sm:inline">Ephemeral</span>
@@ -97,7 +97,7 @@ export function ChatHeader({ title, empty, isLoadingTitle }: { title?: string, e
                     href={DOCS_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg border-border border-1 bg-muted px-2 py-1 text-foreground text-xs hover:text-foreground"
+                    className='flex items-center gap-1.5 rounded-lg border-1 border-border bg-muted px-2 py-1 text-foreground text-xs hover:text-foreground'
                   >
                     <MessageSquareOff className="h-3 w-3" />
                     <span className="hidden sm:inline">Feedback disabled</span>
