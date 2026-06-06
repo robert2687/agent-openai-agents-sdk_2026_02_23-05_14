@@ -482,7 +482,7 @@ const SidebarGroupContentHeader = React.forwardRef<
   <div
     ref={ref}
     data-sidebar="group-content-header"
-    className="px-2 py-1 text-sidebar-foreground/50 text-base"
+    className='px-2 py-1 text-base text-sidebar-foreground/50'
     {...props} />
 ));
 SidebarGroupContentHeader.displayName = 'SidebarGroupContentHeader';
@@ -622,7 +622,7 @@ const SidebarMenuAction = React.forwardRef<
       ref={ref}
       data-sidebar="menu-action"
       className={cn(
-        'absolute cursor-pointer top-1.5 right-1 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground outline-hidden ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 peer-hover/menu-button:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0',
+        'absolute top-1.5 right-1 flex aspect-square w-5 cursor-pointer items-center justify-center rounded-md p-0 text-sidebar-foreground outline-hidden ring-sidebar-ring transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 peer-hover/menu-button:text-sidebar-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0',
         // Increases the hit area of the button on mobile.
         'after:-inset-2 after:absolute md:after:hidden',
         'peer-data-[size=sm]/menu-button:top-0',

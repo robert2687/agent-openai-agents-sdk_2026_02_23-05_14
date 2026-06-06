@@ -216,7 +216,7 @@ export function SidebarHistory({ user }: { user?: ClientUser | null }) {
     return (
       <SidebarGroup>
         <SidebarGroupContent>
-          <div className="flex w-full flex-row items-center justify-center gap-2 px-2 text-sm text-muted-foreground">
+          <div className='flex w-full flex-row items-center justify-center gap-2 px-2 text-muted-foreground text-sm'>
             {chatHistoryEnabled
               ? 'Your conversations will appear here once you start chatting!'
               : 'Chat history is disabled - conversations are not saved'}

@@ -332,9 +332,7 @@ const getEndpointDetails = async (servingEndpoint: string) => {
 
   if (isOboEnabled) {
     console.warn(
-      `⚠ OBO detected on endpoint "${servingEndpoint}". Required user authorization scopes: ${JSON.stringify(userApiScopes)}\n` +
-      `  → Add scopes to your app via the Databricks UI or in databricks.yml\n` +
-      `  → See: https://docs.databricks.com/aws/en/generative-ai/agent-framework/chat-app#enable-user-authorization`,
+      `⚠ OBO detected on endpoint "${servingEndpoint}". Required user authorization scopes: ${JSON.stringify(userApiScopes)}\n  → Add scopes to your app via the Databricks UI or in databricks.yml\n  → See: https://docs.databricks.com/aws/en/generative-ai/agent-framework/chat-app#enable-user-authorization`,
     );
   }
 

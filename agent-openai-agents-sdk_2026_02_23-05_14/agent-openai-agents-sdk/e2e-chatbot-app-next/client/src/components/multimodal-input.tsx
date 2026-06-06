@@ -25,14 +25,14 @@ import {
 import equal from 'fast-deep-equal';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowDown, StopCircleIcon } from 'lucide-react';
+import { ArrowDown, } from 'lucide-react';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import type { VisibilityType } from './visibility-selector';
 import type { Attachment, ChatMessage } from '@chat-template/core';
 import { softNavigateToChatId } from '@/lib/navigation';
 import { useAppConfig } from '@/contexts/AppConfigContext';
 import { DbIcon } from './ui/db-icon';
-import { ChevronDownIcon, ArrowUpIcon, StopIcon } from './icons';
+import { ArrowUpIcon, StopIcon } from './icons';
 
 function PureMultimodalInput({
   chatId,
@@ -300,7 +300,7 @@ function PureMultimodalInput({
               minHeight={44}
               maxHeight={200}
               disableAutoResize={true}
-              className="grow resize-none border-0! border-none! bg-transparent p-2 text-sm outline-none ring-0 [-ms-overflow-style:none] [scrollbar-width:none] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-scrollbar]:hidden text-base md:text-base"
+              className='grow resize-none border-0! border-none! bg-transparent p-2 text-base text-sm outline-none ring-0 [-ms-overflow-style:none] [scrollbar-width:none] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 md:text-base [&::-webkit-scrollbar]:hidden'
               rows={1}
               autoFocus
             />{' '}
@@ -316,7 +316,7 @@ function PureMultimodalInput({
                 status={status}
                 variant="tertiary"
                 disabled={!input.trim() || uploadQueue.length > 0}
-                className="size-8 rounded-full bg-secondary hover:bg-action-tertiary-background-hover text-foreground transition-colors duration-200 disabled:opacity-50 disabled:text-muted-foreground"
+                className='size-8 rounded-full bg-secondary text-foreground transition-colors duration-200 hover:bg-action-tertiary-background-hover disabled:text-muted-foreground disabled:opacity-50'
               >
                 <DbIcon icon={ArrowUpIcon} className="size-4" />
               </PromptInputSubmit>
@@ -326,7 +326,7 @@ function PureMultimodalInput({
 
       </div>
 
-      <p className="-mt-2 text-center text-sm text-muted-foreground">
+      <p className='-mt-2 text-center text-muted-foreground text-sm'>
         Always review the accuracy of responses.
       </p>
 

@@ -1,5 +1,4 @@
 import React, { memo, useState } from 'react';
-import { AnimatedAssistantIcon } from './animation-assistant-icon';
 import { Response } from './elements/response';
 import { MessageContent } from './elements/message';
 import {
@@ -188,7 +187,7 @@ const PurePreviewMessage = ({
                     <MessageContent
                       data-testid="message-content"
                       className={cn({
-                        'bg-secondary w-fit break-words rounded-2xl px-3 py-2 text-left text-base':
+                        'w-fit break-words rounded-2xl bg-secondary px-3 py-2 text-left text-base':
                           message.role === 'user',
                         'bg-transparent px-0 py-0 text-left text-base':
                           message.role === 'assistant',

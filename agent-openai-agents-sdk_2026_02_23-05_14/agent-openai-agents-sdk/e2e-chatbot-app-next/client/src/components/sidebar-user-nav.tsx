@@ -5,7 +5,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -45,7 +44,7 @@ export function SidebarUserNav({
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <div className={cn("flex items-center justify-center flex-col",
+            <div className={cn('flex flex-col items-center justify-center',
               { "h-10": open, 'h-8': !open },
             )}>
               {status === 'loading' ? (
@@ -63,12 +62,12 @@ export function SidebarUserNav({
               ) : (
                 <SidebarMenuButton
                   data-testid="user-nav-button"
-                  className="flex-1 bg-sidebar data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground cursor-pointer"
+                  className='flex-1 cursor-pointer bg-sidebar data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground'
                   tooltip={!open ? displayName : undefined}
                 >
                   <div
                     style={{ ...getAiGradientStyle().styling }}
-                    className={cn("flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold", {
+                    className={cn('flex size-6 shrink-0 items-center justify-center rounded-full font-semibold text-xs', {
                       "-ml-1": !open
                     })}
                   >

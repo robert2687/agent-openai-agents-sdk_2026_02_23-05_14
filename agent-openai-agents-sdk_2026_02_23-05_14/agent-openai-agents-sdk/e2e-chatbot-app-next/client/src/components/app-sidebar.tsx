@@ -18,7 +18,6 @@ import { DbIcon } from '@/components/ui/db-icon';
 import { NewChatIcon, SidebarCollapseIcon, SidebarExpandIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import type { ClientSession } from '@chat-template/auth';
-import { Button } from './ui/button';
 import { Action } from './elements/actions';
 
 export function AppSidebar({
@@ -51,7 +50,7 @@ export function AppSidebar({
             onClick={() => setOpenMobile(false)}
             className="flex items-center overflow-hidden px-1"
           >
-            <span className="text-base font-semibold text-foreground">
+            <span className='font-semibold text-base text-foreground'>
               Chatbot
             </span>
           </Link>
@@ -77,7 +76,7 @@ export function AppSidebar({
               <TooltipTrigger asChild>
                 <SidebarMenuButton
                   type="button"
-                  className="h-8 p-1 md:p-2 cursor-pointer"
+                  className='h-8 cursor-pointer p-1 md:p-2'
                   onClick={() => {
                     setOpenMobile(false);
                     navigate('/');

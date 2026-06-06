@@ -1,0 +1,2 @@
+[console_scripts]
+perfect-agent = agent.runner:main
