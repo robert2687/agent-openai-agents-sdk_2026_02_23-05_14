@@ -1,8 +1,20 @@
+"""Enhanced agent module with caching, circuit breaker, and improved error handling.
+
+This module provides the core agent functionality with:
+- Model caching for better performance
+- Circuit breaker pattern for resilience
+- Enhanced retry logic with exponential backoff
+- Comprehensive error handling
+- Token counting and metrics
+"""
+
 from __future__ import annotations
 
-import os
 import asyncio
 import logging
+import os
+import time
+from functools import lru_cache
 from typing import Any, AsyncGenerator
 
 # Default to local SQLite-backed MLflow tracking before any mlflow import.
@@ -25,6 +37,7 @@ from mlflow.types.responses import (
     ResponsesAgentStreamEvent,
 )
 
+from agent_server.config import get_config
 from agent_server.utils import (
     build_mcp_url,
     get_user_workspace_client,
@@ -32,25 +45,252 @@ from agent_server.utils import (
     sanitize_output_items,
 )
 from agent_server.memory_store import build_memory_store
-
-BACKEND = os.getenv("AGENT_BACKEND", "").strip().lower()
-if BACKEND not in {"databricks", "openai"}:
-    # Default to local/OpenAI mode when not explicitly configured.
-    BACKEND = "openai"
-
-USE_DATABRICKS = BACKEND == "databricks"
-MODEL = os.getenv(
-    "AGENT_MODEL",
-    "databricks-gpt-5-2" if USE_DATABRICKS else "gpt-4.1-mini",
+from agent_server.monitoring import (
+    logger,
+    record_agent_invocation,
+    record_fallback,
+    record_retry_attempt,
 )
-DEFAULT_FALLBACK_MODEL = "databricks-gpt-5-2" if USE_DATABRICKS else "gpt-4.1"
-FALLBACK_MODEL = os.getenv("AGENT_FALLBACK_MODEL", DEFAULT_FALLBACK_MODEL).strip()
+from agent_server.security import InputValidator
 
 
-def _load_databricks_openai():
+# ============================================================================
+# Circuit Breaker Implementation
+# ============================================================================
+
+class CircuitBreaker:
+    """Circuit breaker pattern for external API calls.
+
+    Prevents cascading failures by temporarily blocking calls to failing services.
+    """
+
+    def __init__(
+        self,
+        max_failures: int = 5,
+        reset_timeout: float = 30.0,
+        half_open_after: float = 10.0,
+    ):
+        self.max_failures = max_failures
+        self.reset_timeout = reset_timeout
+        self.half_open_after = half_open_after
+        self._state = "closed"  # closed, open, half-open
+        self._failure_count = 0
+        self._last_failure_time = 0.0
+        self._next_attempt_time = 0.0
+        self._lock = asyncio.Lock()
+
+    async def call(self, func, *args, **kwargs):
+        """Execute function with circuit breaker protection."""
+        async with self._lock:
+            now = time.time()
+
+            if self._state == "open":
+                if now < self._next_attempt_time:
+                    raise CircuitBreakerOpenError(
+                        f"Circuit breaker is open. Retry after {self._next_attempt_time - now:.1f}s"
+                    )
+                # Transition to half-open
+                self._state = "half-open"
+
+            try:
+                result = await func(*args, **kwargs)
+                # Success - reset circuit breaker
+                self._reset()
+                return result
+            except Exception as e:
+                self._record_failure(now)
+                raise
+
+    def _reset(self):
+        """Reset circuit breaker state."""
+        self._state = "closed"
+        self._failure_count = 0
+        self._last_failure_time = 0.0
+        self._next_attempt_time = 0.0
+
+    def _record_failure(self, failure_time: float):
+        """Record a failure."""
+        self._failure_count += 1
+        self._last_failure_time = failure_time
+
+        if self._failure_count >= self.max_failures:
+            self._state = "open"
+            self._next_attempt_time = failure_time + self.reset_timeout
+
+
+class CircuitBreakerOpenError(Exception):
+    """Raised when circuit breaker is open."""
+
+    pass
+
+
+# ============================================================================
+# Model Cache
+# ============================================================================
+
+class ModelCache:
+    """Cache for agent instances to avoid repeated initialization."""
+
+    def __init__(self, max_size: int = 10):
+        self._cache: dict[str, Agent] = {}
+        self._max_size = max_size
+        self._lock = asyncio.Lock()
+        self._access_times: dict[str, float] = {}
+
+    async def get(self, key: str, create_func) -> Agent:
+        """Get agent from cache or create new one."""
+        async with self._lock:
+            if key in self._cache:
+                # Update access time for LRU
+                self._access_times[key] = time.time()
+                return self._cache[key]
+
+            # Create new agent
+            agent = await create_func()
+            self._cache[key] = agent
+            self._access_times[key] = time.time()
+
+            # Evict oldest if cache is full
+            if len(self._cache) > self._max_size:
+                self._evict_oldest()
+
+            return agent
+
+    def _evict_oldest(self):
+        """Evict least recently used agent."""
+        if not self._access_times:
+            return
+
+        oldest_key = min(self._access_times.keys(), key=self._access_times.get)
+        self._cache.pop(oldest_key, None)
+        self._access_times.pop(oldest_key, None)
+
+    def clear(self):
+        """Clear all cached agents."""
+        self._cache.clear()
+        self._access_times.clear()
+
+    def invalidate(self, key: str):
+        """Invalidate a specific agent."""
+        self._cache.pop(key, None)
+        self._access_times.pop(key, None)
+
+
+# Global model cache
+model_cache = ModelCache(max_size=10)
+
+
+# ============================================================================
+# Connection Cache
+# ============================================================================
+
+class ConnectionCache:
+    """Cache for OpenAI client connections."""
+
+    def __init__(self):
+        self._clients: dict[str, AsyncOpenAI] = {}
+        self._lock = asyncio.Lock()
+
+    async def get_client(self, base_url: str | None, api_key: str | None) -> AsyncOpenAI:
+        """Get or create OpenAI client."""
+        cache_key = f"{base_url}:{bool(api_key)}"
+
+        async with self._lock:
+            if cache_key in self._clients:
+                return self._clients[cache_key]
+
+            client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+            self._clients[cache_key] = client
+            return client
+
+    def clear(self):
+        """Clear all cached clients."""
+        self._clients.clear()
+
+
+connection_cache = ConnectionCache()
+
+
+# ============================================================================
+# Configuration and State
+# ============================================================================
+
+config = get_config()
+
+BACKEND = config.backend
+USE_DATABRICKS = BACKEND == "databricks"
+MODEL = config.model
+FALLBACK_MODEL = config.fallback_model or None
+MAX_RETRIES = config.max_retries
+RETRY_BASE_SECONDS = config.retry_base_seconds
+MAX_TOKENS = config.max_tokens
+LOGGER = logging.getLogger(__name__)
+MEMORY_STORE = build_memory_store()
+DEFAULT_MEMORY_TENANT = config.memory_tenant
+DEFAULT_MEMORY_USER = config.memory_user
+
+# Circuit breakers for different services
+openai_circuit_breaker = CircuitBreaker(max_failures=5, reset_timeout=60.0)
+databricks_circuit_breaker = CircuitBreaker(max_failures=3, reset_timeout=120.0)
+
+CODING_INSTRUCTIONS = """
+You are a senior coding assistant.
+
+Behavior requirements:
+1) If the request is ambiguous, ask concise clarifying questions before coding.
+2) Prefer correct, runnable solutions over clever but brittle ones.
+3) Return code in fenced blocks and include short usage/test snippets when relevant.
+4) For bug fixes/refactors, explain what changed and why in 3-6 bullets.
+5) If tools are unavailable, say so clearly and provide the best no-tool fallback.
+""".strip()
+
+# Databricks models are served via Chat Completions-compatible APIs.
+_OPENAI_CLIENT: AsyncOpenAI | None = None
+OPENAI_CREDENTIALS_CONFIGURED = config.openai_credentials_configured
+
+# Initialize OpenAI client with caching
+async def _get_openai_client() -> AsyncOpenAI | None:
+    """Get OpenAI client with connection caching."""
+    global _OPENAI_CLIENT
+
+    if _OPENAI_CLIENT is not None:
+        return _OPENAI_CLIENT
+
+    if USE_DATABRICKS:
+        try:
+            from databricks_openai import AsyncDatabricksOpenAI
+
+            _OPENAI_CLIENT = AsyncDatabricksOpenAI()
+            set_default_openai_client(_OPENAI_CLIENT)
+            set_default_openai_api("chat_completions")
+            return _OPENAI_CLIENT
+        except ImportError as exc:
+            LOGGER.warning("Databricks backend selected but databricks-openai is not installed: %s", exc)
+            return None
+    else:
+        if OPENAI_CREDENTIALS_CONFIGURED:
+            _OPENAI_CLIENT = await connection_cache.get_client(
+                base_url=config.openai_base_url,
+                api_key=config.openai_api_key or config.openai_admin_key
+            )
+            set_default_openai_client(_OPENAI_CLIENT)
+            set_default_openai_api("chat_completions")
+            return _OPENAI_CLIENT
+        else:
+            LOGGER.warning(
+                "OPENAI_API_KEY/OPENAI_ADMIN_KEY is not set. Server can start, but /invocations will fail "
+                "until OpenAI credentials are configured."
+            )
+            return None
+
+
+# ============================================================================
+# Agent Creation
+# ============================================================================
+
+async def _load_databricks_openai():
     try:
-        from databricks_openai import AsyncDatabricksOpenAI
-        from databricks_openai.agents import McpServer
+        from databricks_openai import AsyncDatabricksOpenAI, McpServer
 
         return AsyncDatabricksOpenAI, McpServer
     except ImportError as exc:  # pragma: no cover
@@ -68,68 +308,9 @@ def _require_databricks_sdk() -> None:
         )
 
 
-def _read_int_env(name: str, default: int) -> int:
-    try:
-        return int(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-
-
-def _read_float_env(name: str, default: float) -> float:
-    try:
-        return float(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-
-
-MAX_RETRIES = max(1, _read_int_env("AGENT_MAX_RETRIES", 3))
-RETRY_BASE_SECONDS = max(0.1, _read_float_env("AGENT_RETRY_BASE_SECONDS", 1.5))
-MAX_TOKENS = _read_int_env("AGENT_MAX_TOKENS", 4096)  # OpenRouter free tier cap
-LOGGER = logging.getLogger(__name__)
-MEMORY_STORE = build_memory_store()
-DEFAULT_MEMORY_TENANT = os.getenv("AGENT_MEMORY_TENANT", "default-tenant")
-DEFAULT_MEMORY_USER = os.getenv("AGENT_MEMORY_USER", "default-user")
-
-CODING_INSTRUCTIONS = """
-You are a senior coding assistant.
-
-Behavior requirements:
-1) If the request is ambiguous, ask concise clarifying questions before coding.
-2) Prefer correct, runnable solutions over clever but brittle ones.
-3) Return code in fenced blocks and include short usage/test snippets when relevant.
-4) For bug fixes/refactors, explain what changed and why in 3-6 bullets.
-5) If tools are unavailable, say so clearly and provide the best no-tool fallback.
-""".strip()
-
-# Databricks models are served via Chat Completions-compatible APIs.
-_OPENAI_CLIENT: AsyncOpenAI | None = None
-OPENAI_CREDENTIALS_CONFIGURED = bool(os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_ADMIN_KEY"))
-
-if USE_DATABRICKS:
-    AsyncDatabricksOpenAI, _ = _load_databricks_openai()
-    set_default_openai_client(AsyncDatabricksOpenAI())
-    set_default_openai_api("chat_completions")
-else:
-    if OPENAI_CREDENTIALS_CONFIGURED:
-        # Extension-like mode: standard OpenAI key + model.
-        # Optional OPENAI_BASE_URL is supported by the OpenAI SDK.
-        _OPENAI_CLIENT = AsyncOpenAI(base_url=os.getenv("OPENAI_BASE_URL") or None)
-        set_default_openai_client(_OPENAI_CLIENT)
-        set_default_openai_api("chat_completions")
-    else:
-        LOGGER.warning(
-            "OPENAI_API_KEY/OPENAI_ADMIN_KEY is not set. Server can start, but /invocations will fail "
-            "until OpenAI credentials are configured."
-        )
-
-set_trace_processors([])  # only use mlflow for trace processing
-if os.getenv("AGENT_ENABLE_MLFLOW_AUTOLOG", "0") == "1":
-    mlflow.openai.autolog()
-
-
 async def init_mcp_server(workspace_client: WorkspaceClient | None = None):
     _require_databricks_sdk()
-    _, McpServer = _load_databricks_openai()
+    AsyncDatabricksOpenAI, McpServer = await _load_databricks_openai()
     return McpServer(
         url=build_mcp_url("/api/2.0/mcp/functions/system/ai", workspace_client=workspace_client),
         name="system.ai UC function MCP server",
@@ -137,20 +318,15 @@ async def init_mcp_server(workspace_client: WorkspaceClient | None = None):
     )
 
 
-def create_coding_agent(mcp_server=None) -> Agent:
-    mcp_servers = [mcp_server] if mcp_server else []
-    return create_coding_agent_for_model(model=MODEL, mcp_server=mcp_server)
-
-
-def create_coding_agent_for_model(model: str, mcp_server=None) -> Agent:
+async def _create_agent_for_model(model: str, mcp_server=None) -> Agent:
+    """Create agent instance for specific model."""
     if not USE_DATABRICKS and _OPENAI_CLIENT is None:
         raise RuntimeError(
             "OpenAI backend is not configured. Set OPENAI_API_KEY (or OPENAI_ADMIN_KEY) and restart the server."
         )
 
-    mcp_servers = [mcp_server] if mcp_server else []
     # When using a custom base_url (e.g. OpenRouter), the Agents SDK doesn't
-    # recognise non-standard model name prefixes (e.g. "nvidia/…", "qwen/…").
+    # recognise non-standard model name prefixes (e.g. "nvidia/...", "qwen/...").
     # Wrap in OpenAIChatCompletionsModel so the SDK uses the custom client directly.
     if _OPENAI_CLIENT is not None and "/" in model:
         resolved_model = OpenAIChatCompletionsModel(
@@ -159,14 +335,31 @@ def create_coding_agent_for_model(model: str, mcp_server=None) -> Agent:
         )
     else:
         resolved_model = model  # type: ignore[assignment]
+
     return Agent(
         name="Code execution agent",
         instructions=CODING_INSTRUCTIONS,
         model=resolved_model,
         model_settings=ModelSettings(max_tokens=MAX_TOKENS),
-        mcp_servers=mcp_servers,
+        mcp_servers=[mcp_server] if mcp_server else [],
     )
 
+
+async def create_coding_agent(mcp_server=None) -> Agent:
+    """Create coding agent with caching."""
+    cache_key = f"{MODEL}:{id(mcp_server)}"
+    return await model_cache.get(cache_key, lambda: _create_agent_for_model(MODEL, mcp_server))
+
+
+async def create_coding_agent_for_model(model: str, mcp_server=None) -> Agent:
+    """Create coding agent for specific model with caching."""
+    cache_key = f"{model}:{id(mcp_server)}"
+    return await model_cache.get(cache_key, lambda: _create_agent_for_model(model, mcp_server))
+
+
+# ============================================================================
+# Candidate Models
+# ============================================================================
 
 def _candidate_models() -> list[str]:
     candidates = [MODEL]
@@ -175,17 +368,53 @@ def _candidate_models() -> list[str]:
     return candidates
 
 
+# ============================================================================
+# Retry Logic with Circuit Breaker
+# ============================================================================
+
 async def _run_with_retries(messages: list[dict], mcp_server=None):
+    """Run agent with retry logic and circuit breaker."""
     last_error = None
+    start_time = time.time()
+
     for model_idx, candidate_model in enumerate(_candidate_models(), start=1):
-        agent = create_coding_agent_for_model(candidate_model, mcp_server=mcp_server)
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                return await Runner.run(agent, messages)
+                # Use circuit breaker for OpenAI calls
+                async def run_agent():
+                    agent = await create_coding_agent_for_model(candidate_model, mcp_server=mcp_server)
+                    return await Runner.run(agent, messages)
+
+                result = await openai_circuit_breaker.call(run_agent)
+
+                # Record metrics
+                duration = time.time() - start_time
+                record_agent_invocation(
+                    model=candidate_model,
+                    streaming=False,
+                    status="success",
+                    duration=duration,
+                )
+
+                return result
+
+            except CircuitBreakerOpenError as exc:
+                LOGGER.warning("Circuit breaker open for model %s: %s", candidate_model, exc)
+                record_agent_invocation(
+                    model=candidate_model,
+                    streaming=False,
+                    status="circuit_breaker_open",
+                )
+                last_error = exc
+                break  # Don't retry if circuit breaker is open
+
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
+                record_retry_attempt(candidate_model, attempt)
+
                 if attempt >= MAX_RETRIES:
                     break
+
                 delay = RETRY_BASE_SECONDS * (2 ** (attempt - 1))
                 LOGGER.warning(
                     "Agent run failed (model=%s, attempt=%s/%s). Retrying in %.1fs. Error=%s",
@@ -203,6 +432,7 @@ async def _run_with_retries(messages: list[dict], mcp_server=None):
                 candidate_model,
                 _candidate_models()[model_idx],
             )
+            record_fallback(candidate_model, _candidate_models()[model_idx])
 
     raise RuntimeError(f"Agent failed after retries and fallback. Last error: {last_error}")
 
@@ -211,24 +441,56 @@ async def _stream_with_retries(
     messages: list[dict],
     mcp_server=None,
 ) -> AsyncGenerator[ResponsesAgentStreamEvent, None]:
+    """Stream agent response with retry logic."""
     last_error = None
+    start_time = time.time()
+
     for model_idx, candidate_model in enumerate(_candidate_models(), start=1):
-        agent = create_coding_agent_for_model(candidate_model, mcp_server=mcp_server)
         for attempt in range(1, MAX_RETRIES + 1):
             emitted_any = False
             try:
-                result = Runner.run_streamed(agent, input=messages)
-                async for event in process_agent_stream_events(result.stream_events()):
+                async def stream_agent():
+                    agent = await create_coding_agent_for_model(candidate_model, mcp_server=mcp_server)
+                    result = Runner.run_streamed(agent, input=messages)
+                    return result.stream_events()
+
+                async for event in process_agent_stream_events(
+                    await openai_circuit_breaker.call(stream_agent)
+                ):
                     emitted_any = True
                     yield event
+
+                # Record metrics
+                duration = time.time() - start_time
+                record_agent_invocation(
+                    model=candidate_model,
+                    streaming=True,
+                    status="success",
+                    duration=duration,
+                )
                 return
+
+            except CircuitBreakerOpenError as exc:
+                LOGGER.warning("Circuit breaker open for streaming model %s: %s", candidate_model, exc)
+                record_agent_invocation(
+                    model=candidate_model,
+                    streaming=True,
+                    status="circuit_breaker_open",
+                )
+                last_error = exc
+                break
+
             except Exception as exc:  # noqa: BLE001
                 last_error = exc
+                record_retry_attempt(candidate_model, attempt)
+
                 # Avoid duplicate partial streams if output has already started.
                 if emitted_any:
                     raise
+
                 if attempt >= MAX_RETRIES:
                     break
+
                 delay = RETRY_BASE_SECONDS * (2 ** (attempt - 1))
                 LOGGER.warning(
                     "Agent stream failed (model=%s, attempt=%s/%s). Retrying in %.1fs. Error=%s",
@@ -246,9 +508,14 @@ async def _stream_with_retries(
                 candidate_model,
                 _candidate_models()[model_idx],
             )
+            record_fallback(candidate_model, _candidate_models()[model_idx])
 
     raise RuntimeError(f"Agent stream failed after retries and fallback. Last error: {last_error}")
 
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
 
 def _latest_user_text(messages: list[dict]) -> str:
     for message in reversed(messages):
@@ -298,6 +565,10 @@ def _missing_credentials_output() -> list[dict[str, Any]]:
     ]
 
 
+# ============================================================================
+# Memory Persistence
+# ============================================================================
+
 async def _persist_memory(messages: list[dict], output_items: list[dict]) -> None:
     """Persist simple request/response memory with safe fallbacks.
 
@@ -327,9 +598,22 @@ async def _persist_memory(messages: list[dict], output_items: list[dict]) -> Non
         LOGGER.warning("Memory persistence skipped due to error: %s", exc)
 
 
+# ============================================================================
+# Handler Functions
+# ============================================================================
+
 @invoke()
 async def invoke_handler(request: ResponsesAgentRequest) -> ResponsesAgentResponse:
+    """Handle non-streaming agent invocations."""
+    # Validate input
     messages = [i.model_dump() for i in request.input]
+    is_valid, error_msg = InputValidator.validate_messages(messages)
+    if not is_valid:
+        raise ValueError(f"Invalid input: {error_msg}")
+
+    # Initialize OpenAI client if needed
+    if _OPENAI_CLIENT is None:
+        await _get_openai_client()
 
     if USE_DATABRICKS:
         workspace_client = get_user_workspace_client() or WorkspaceClient()
@@ -354,7 +638,16 @@ async def invoke_handler(request: ResponsesAgentRequest) -> ResponsesAgentRespon
 
 @stream()
 async def stream_handler(request: dict) -> AsyncGenerator[ResponsesAgentStreamEvent, None]:
+    """Handle streaming agent invocations."""
+    # Validate input
     messages = [i.model_dump() for i in request.input]
+    is_valid, error_msg = InputValidator.validate_messages(messages)
+    if not is_valid:
+        raise ValueError(f"Invalid input: {error_msg}")
+
+    # Initialize OpenAI client if needed
+    if _OPENAI_CLIENT is None:
+        await _get_openai_client()
 
     if USE_DATABRICKS:
         workspace_client = get_user_workspace_client() or WorkspaceClient()
@@ -365,3 +658,13 @@ async def stream_handler(request: dict) -> AsyncGenerator[ResponsesAgentStreamEv
 
     async for event in _stream_with_retries(messages):
         yield event
+
+
+# ============================================================================
+# Initialization
+# ============================================================================
+
+# Set up MLflow tracing
+set_trace_processors([])  # only use mlflow for trace processing
+if os.getenv("AGENT_ENABLE_MLFLOW_AUTOLOG", "0") == "1":
+    mlflow.openai.autolog()

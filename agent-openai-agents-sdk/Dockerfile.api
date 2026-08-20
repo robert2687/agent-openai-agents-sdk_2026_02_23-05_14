@@ -1,0 +1,92 @@
+# Multi-stage Dockerfile for Agent OpenAI Agents SDK API
+# This Dockerfile provides:
+# - Smaller final image size
+# - Better security through non-root user
+# - Proper dependency caching
+# - Health checks
+# - Production optimizations
+
+# ============================================================================
+# Build Stage
+# ============================================================================
+FROM python:3.11-slim as builder
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=100
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create and activate virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python dependencies
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ============================================================================
+# Runtime Stage
+# ============================================================================
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app"
+
+# Create non-root user for security
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+WORKDIR /app
+RUN chown appuser:appgroup /app
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Copy application code
+COPY . .
+
+# Set proper permissions
+RUN chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data /app/tmp
+
+# Set environment variables for the application
+ENV AGENT_BACKEND=${AGENT_BACKEND:-openai} \
+    AGENT_MODEL=${AGENT_MODEL:-gpt-4.1-mini} \
+    AGENT_FALLBACK_MODEL=${AGENT_FALLBACK_MODEL:-gpt-4.1} \
+    AGENT_MAX_RETRIES=${AGENT_MAX_RETRIES:-3} \
+    AGENT_RETRY_BASE_SECONDS=${AGENT_RETRY_BASE_SECONDS:-1.5} \
+    AGENT_MAX_TOKENS=${AGENT_MAX_TOKENS:-4096} \
+    AGENT_REQUIRE_AUTH=${AGENT_REQUIRE_AUTH:-0} \
+    AGENT_RATE_LIMIT_PER_MINUTE=${AGENT_RATE_LIMIT_PER_MINUTE:-120} \
+    MEMORY_BACKEND=${MEMORY_BACKEND:-inmemory} \
+    AGENT_ENABLE_PROMETHEUS=${AGENT_ENABLE_PROMETHEUS:-0} \
+    MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-sqlite:///mlflow.db} \
+    API_PORT=${API_PORT:-8000}
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Default command
+CMD ["uv", "run", "start-server"]
+
+# Alternative command (if uv is not available)
+# CMD ["python", "-m", "agent_server.start_server"]
