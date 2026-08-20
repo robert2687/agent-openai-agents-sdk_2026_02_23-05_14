@@ -1,0 +1,204 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "agent-openai-agents-sdk",
+    "title": "Agent OpenAI Agents SDK",
+    "tags": ["agent", "openai", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 30,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(agent_requests_total[5m])) by (method, endpoint)",
+            "legendFormat": "{{method}} {{endpoint}}"
+          }
+        ],
+        "xaxis": {"type": "time"},
+        "yaxis": {"type": "log", "log": 10}
+      },
+      {
+        "id": 2,
+        "title": "Request Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(agent_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+            "legendFormat": "p95 {{endpoint}}"
+          },
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(agent_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+            "legendFormat": "p50 {{endpoint}}"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(agent_errors_total[5m])) by (error_type)",
+            "legendFormat": "{{error_type}}"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Agent Invocations",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(agent_invocations_total[5m])) by (model, streaming, status)",
+            "legendFormat": "{{model}} (streaming={{streaming}}, status={{status}})"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Token Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(agent_tokens_total[5m])) by (model, token_type)",
+            "legendFormat": "{{model}} - {{token_type}}"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Agent Processing Duration",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(agent_processing_duration_seconds_bucket[5m])) by (le, model))",
+            "legendFormat": "p95 {{model}}"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Retry Attempts",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(agent_retry_attempts_total[5m])) by (model, attempt_number)",
+            "legendFormat": "{{model}} - attempt {{attempt_number}}"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Fallback Invocations",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(agent_fallback_invocations_total[5m])) by (from_model, to_model)",
+            "legendFormat": "{{from_model}} -> {{to_model}}"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Rate Limited Requests",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(agent_rate_limited_requests_total[5m])) by (user_id)",
+            "legendFormat": "{{user_id}}"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Active Connections",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "agent_active_connections",
+            "legendFormat": "Active Connections"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Memory Messages",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "sum(agent_memory_messages_total) by (tenant_id, user_id)",
+            "legendFormat": "{{tenant_id}} - {{user_id}}"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "System Overview",
+        "type": "row",
+        "panels": [
+          {
+            "id": 13,
+            "title": "Total Requests",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(agent_requests_total)",
+                "legendFormat": "Total"
+              }
+            ]
+          },
+          {
+            "id": 14,
+            "title": "Success Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(agent_requests_total{status_code=~'2..'}) / sum(agent_requests_total) * 100",
+                "legendFormat": "Success Rate %"
+              }
+            ]
+          },
+          {
+            "id": 15,
+            "title": "Total Tokens",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(agent_tokens_total)",
+                "legendFormat": "Total"
+              }
+            ]
+          },
+          {
+            "id": 16,
+            "title": "Total Errors",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(agent_errors_total)",
+                "legendFormat": "Total"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "templating": {
+      "list": []
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "",
+    "title": "Agent OpenAI Agents SDK",
+    "uid": "agent-openai-agents-sdk"
+  },
+  "overwrite": true
+}

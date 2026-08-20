@@ -1,14 +1,253 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
+    branches: [main, develop]
+    tags: ["v*"]
   pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test-and-lint:
+  # ============================================================================
+  # Linting and Code Quality
+  # ============================================================================
+  lint:
+    name: Linting and Code Quality
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
-      - name: Checkout
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "pyproject.toml"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+          pip install ruff mypy bandit safety
+
+      - name: Run ruff linter
+        run: ruff check . --output-file=ruff-report.json
+
+      - name: Run mypy type checker
+        run: mypy . --ignore-missing-imports --output=mypy-report.txt
+
+      - name: Run bandit security linter
+        run: bandit -r . -f json -o bandit-report.json || true
+
+      - name: Run safety dependency checker
+        run: safety check --json --output safety-report.json || true
+
+      - name: Upload lint reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lint-reports
+          path: |
+            ruff-report.json
+            mypy-report.txt
+            bandit-report.json
+            safety-report.json
+
+  # ============================================================================
+  # Unit Tests
+  # ============================================================================
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: "pyproject.toml"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+          pip install pytest pytest-cov pytest-asyncio httpx
+
+      - name: Run unit tests with coverage
+        run: |
+          pytest tests/ --cov=agent_server --cov=local_agents --cov=api --cov=sdk \
+            --cov-report=xml --cov-report=html --junitxml=test-results.xml \
+            -v --tb=short
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.python-version }}
+          path: |
+            test-results.xml
+            coverage.xml
+            htmlcov/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.11'
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          flags: unittests
+          name: coverage-${{ matrix.python-version }}
+
+  # ============================================================================
+  # Integration Tests
+  # ============================================================================
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint, test]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: "pyproject.toml"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+          pip install pytest pytest-asyncio httpx
+
+      - name: Start test server
+        run: |
+          # Start server in background
+          uv run start-server &
+          sleep 5
+
+      - name: Run integration tests
+        run: |
+          pytest tests/test_perfect_agent_integration.py -v --tb=short
+
+      - name: Stop test server
+        if: always()
+        run: pkill -f "start-server" || true
+
+  # ============================================================================
+  # Docker Build and Test
+  # ============================================================================
+  docker:
+    name: Docker Build and Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint, test]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.api
+          tags: |
+            agent-openai-agents-sdk:latest
+            agent-openai-agents-sdk:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          load: true
+
+      - name: Run Docker container test
+        run: |
+          docker run --rm -d -p 8000:8000 --name test-agent \
+            -e OPENAI_API_KEY=test-key \
+            -e AGENT_BACKEND=openai \
+            agent-openai-agents-sdk:latest
+          sleep 5
+          curl -f http://localhost:8000/health || exit 1
+          docker stop test-agent
+
+      - name: Push Docker image
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.api
+          push: true
+          tags: |
+            agent-openai-agents-sdk:latest
+            agent-openai-agents-sdk:${{ github.sha }}
+
+  # ============================================================================
+  # Security Scan
+  # ============================================================================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [lint]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
+
+  # ============================================================================
+  # Documentation
+  # ============================================================================
+  docs:
+    name: Generate Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [lint, test]
+
+    steps:
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -18,12 +257,86 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install -e .
-          pip install pytest httpx uvicorn fastapi
+          pip install -e .[dev]
+          pip install pdoc
 
-      - name: Run tests
+      - name: Generate API documentation
         run: |
-          source .venv/bin/activate
-          pytest -q
+          pdoc --html --output-dir docs/api agent_server local_agents api sdk
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-documentation
+          path: docs/api/
+
+  # ============================================================================
+  # Release
+  # ============================================================================
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [lint, test, integration-test, docker, security-scan, docs]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e .[dev]
+
+      - name: Build distribution packages
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ============================================================================
+  # Deployment (Example for Databricks)
+  # ============================================================================
+  deploy-databricks:
+    name: Deploy to Databricks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint, test, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Databricks CLI
+        uses: databricks/setup-databricks-cli@v1
+        with:
+          databricks-cli-version: "0.200.0"
+
+      - name: Configure Databricks CLI
+        run: |
+          echo "${{ secrets.DATABRICKS_HOST }}" > ~/.databrickscfg
+          echo "${{ secrets.DATABRICKS_TOKEN }}" >> ~/.databrickscfg
+
+      - name: Deploy to Databricks Apps
+        run: |
+          databricks apps update agent-openai-agents-sdk \
+            --source-code-path . \
+            --config-file databricks.yml
