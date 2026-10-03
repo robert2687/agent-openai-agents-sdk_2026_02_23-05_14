@@ -18,6 +18,9 @@ def app_creator(
     Supported types: python_cli, fastapi, node_api, static_web.
     """
     t = app_type.strip().lower()
+    if t not in {"python_cli", "fastapi", "node_api", "static_web"}:
+        return {"ok": False, "error": "Unsupported app_type. Use: python_cli, fastapi, node_api, static_web"}
+
     base = Path(root).resolve() / name
     created: List[str] = []
 
@@ -35,8 +38,6 @@ def app_creator(
             created += _scaffold_node_api(base, name)
         elif t == "static_web":
             created += _scaffold_static_web(base, name)
-        else:
-            return {"ok": False, "error": "Unsupported app_type. Use: python_cli, fastapi, node_api, static_web"}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": str(exc), "created": created}
 
