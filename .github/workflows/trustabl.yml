@@ -19,8 +19,6 @@ jobs:
       cancel-in-progress: true
     permissions:
       contents: read
-      security-events: write
-      pull-requests: write
     # continue-on-error keeps this job advisory — findings are reported but
     # CI does not go red so unrelated work is never blocked.
     continue-on-error: true
