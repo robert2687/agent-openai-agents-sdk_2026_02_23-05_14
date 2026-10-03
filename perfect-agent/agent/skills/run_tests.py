@@ -117,17 +117,21 @@ def _parse_pytest(result: subprocess.CompletedProcess) -> Dict[str, Any]:
 def _parse_unittest(result: subprocess.CompletedProcess) -> Dict[str, Any]:
     stderr = result.stderr  # unittest writes to stderr
     ran_match = re.search(r"Ran (\d+) test", stderr)
-    ok_match = re.search(r"^(OK|FAILED)", stderr, re.MULTILINE)
     fail_match = re.search(r"failures=(\d+)", stderr)
     err_match = re.search(r"errors=(\d+)", stderr)
+    skip_match = re.search(r"skipped=(\d+)", stderr)
+    total = int(ran_match.group(1)) if ran_match else None
+    failed = int(fail_match.group(1)) if fail_match else 0
+    errors = int(err_match.group(1)) if err_match else 0
+    skipped = int(skip_match.group(1)) if skip_match else 0
 
     return {
         "ok": result.returncode == 0,
         "runner": "unittest",
-        "passed": int(ran_match.group(1)) if ran_match else None,
-        "failed": int(fail_match.group(1)) if fail_match else 0,
-        "errors": int(err_match.group(1)) if err_match else 0,
-        "skipped": None,
+        "passed": max(total - failed - errors - skipped, 0) if total is not None else None,
+        "failed": failed,
+        "errors": errors,
+        "skipped": skipped,
         "failures": [],
         "summary": stderr.strip()[-800:],
         "stdout": result.stdout,
