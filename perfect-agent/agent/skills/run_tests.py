@@ -1,0 +1,139 @@
+"""run_tests — discover and execute the test suite, return structured results.
+
+Runs ``pytest`` (preferred) or ``unittest discover`` and parses the summary
+so the agent can reason about failures without reading raw terminal output.
+"""
+from __future__ import annotations
+
+import re
+import subprocess
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+
+def run_tests(
+    root: str = ".",
+    *,
+    pattern: str = "test_*.py",
+    extra_args: Optional[List[str]] = None,
+    timeout: int = 120,
+) -> Dict[str, Any]:
+    """Run the project's test suite and return a structured summary.
+
+    Tries ``pytest`` first; falls back to ``python -m unittest discover``.
+
+    Args:
+        root: Directory to run tests in (default ``"."``).
+        pattern: Test file glob pattern (used by unittest discover).
+        extra_args: Additional CLI args forwarded to pytest (e.g. ["-k", "auth"]).
+        timeout: Max seconds to wait for the test run.
+
+    Returns:
+        dict with keys:
+          - ``ok``: True if all tests passed
+          - ``runner``: "pytest" or "unittest"
+          - ``passed``, ``failed``, ``errors``, ``skipped``: counts (where available)
+          - ``summary``: last few lines of output
+          - ``failures``: list of failure snippets (pytest only)
+          - ``stdout``, ``stderr``: full output
+    """
+    cwd = str(Path(root).resolve())
+    extra = extra_args or []
+
+    # ── Try pytest ────────────────────────────────────────────────────────────
+    pytest_cmd = ["python", "-m", "pytest", "--tb=short", "-q"] + extra
+    try:
+        result = subprocess.run(
+            pytest_cmd,
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            timeout=timeout,
+        )
+        if result.returncode not in (4, 5):  # 4 = no tests collected is still valid
+            return _parse_pytest(result)
+    except FileNotFoundError:
+        pass
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "runner": "pytest", "error": "Timed out", "summary": "Test run timed out"}
+
+    # ── Fallback: unittest discover ───────────────────────────────────────────
+    unittest_cmd = [
+        "python", "-m", "unittest", "discover",
+        "-s", cwd, "-p", pattern,
+    ]
+    try:
+        result = subprocess.run(
+            unittest_cmd,
+            capture_output=True,
+            text=True,
+            cwd=cwd,
+            timeout=timeout,
+        )
+        return _parse_unittest(result)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "runner": "unittest", "error": "Timed out"}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "runner": "unknown", "error": str(exc)}
+
+
+# ── Parsers ───────────────────────────────────────────────────────────────────
+
+def _parse_pytest(result: subprocess.CompletedProcess) -> Dict[str, Any]:
+    stdout = result.stdout
+    stderr = result.stderr
+    out = {}
+
+    # Pytest orders summary fields by outcome, e.g. "1 failed, 3 passed".
+    counts = {
+        label: int(count)
+        for count, label in re.findall(r"(\d+)\s+(passed|failed|errors?|skipped)\b", stdout)
+    }
+    if counts:
+        out["passed"] = counts.get("passed", 0)
+        out["failed"] = counts.get("failed", 0)
+        out["errors"] = counts.get("errors", counts.get("error", 0))
+        out["skipped"] = counts.get("skipped", 0)
+    else:
+        out["passed"] = out["failed"] = out["errors"] = out["skipped"] = None
+
+    # Extract FAILED lines
+    failures: List[str] = re.findall(r"^FAILED .+", stdout, re.MULTILINE)
+
+    lines = stdout.strip().splitlines()
+    summary = "\n".join(lines[-15:]) if lines else ""
+
+    return {
+        "ok": result.returncode == 0,
+        "runner": "pytest",
+        **out,
+        "failures": failures,
+        "summary": summary,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+
+
+def _parse_unittest(result: subprocess.CompletedProcess) -> Dict[str, Any]:
+    stderr = result.stderr  # unittest writes to stderr
+    ran_match = re.search(r"Ran (\d+) test", stderr)
+    fail_match = re.search(r"failures=(\d+)", stderr)
+    err_match = re.search(r"errors=(\d+)", stderr)
+    skip_match = re.search(r"skipped=(\d+)", stderr)
+    total = int(ran_match.group(1)) if ran_match else None
+    failed = int(fail_match.group(1)) if fail_match else 0
+    errors = int(err_match.group(1)) if err_match else 0
+    skipped = int(skip_match.group(1)) if skip_match else 0
+
+    return {
+        "ok": result.returncode == 0,
+        "runner": "unittest",
+        "passed": max(total - failed - errors - skipped, 0) if total is not None else None,
+        "failed": failed,
+        "errors": errors,
+        "skipped": skipped,
+        "failures": [],
+        "summary": stderr.strip()[-800:],
+        "stdout": result.stdout,
+        "stderr": stderr,
+    }
